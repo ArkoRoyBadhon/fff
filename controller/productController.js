@@ -170,13 +170,14 @@ const getAllProducts = async (req, res) => {
   // }
 
   if (category) {
-    if (categoryType === "subcategory") {
-      queryObject["categories.subCategories._id"] = new mongoose.Types.ObjectId(
-        category
-      );
-    } else if (categoryType === "sub-subcategory") {
-      queryObject["categories.subCategories.subSubCategories._id"] =
-        new mongoose.Types.ObjectId(category);
+    if (Number(categoryType) === 1) {
+      queryObject.subCategory = {
+        $in: [new mongoose.Types.ObjectId(category)],
+      };
+    } else if (Number(categoryType) === 2) {
+      queryObject.subSubCategory = {
+        $in: [new mongoose.Types.ObjectId(category)],
+      };
     } else {
       queryObject.category = new mongoose.Types.ObjectId(category);
     }
