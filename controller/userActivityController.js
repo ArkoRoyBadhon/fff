@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
 const UserActivity = require("../models/UserActivity");
-
+const requestIp = require("request-ip");
 const logSearch = async (req, res) => {
   try {
     const { searchString } = req.body;
@@ -11,7 +11,8 @@ const logSearch = async (req, res) => {
         .send({ message: "IP address and search string are required." });
     }
 
-    const ipAddress = req.ip;
+    // const ipAddress = req.ip;
+    const ipAddress = requestIp.getClientIp(req);
     // req.headers["x-forwarded-for"]?.split(",")[0] ||
     // req.connection?.remoteAddress;
 

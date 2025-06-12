@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 const Advertisement = require("../models/Advertisement");
 const UserActivity = require("../models/UserActivity");
-
+const requestIp = require("request-ip");
 const createAdvertisement = async (req, res) => {
   try {
     const {
@@ -244,7 +244,8 @@ const getAllAdvertisements = async (req, res) => {
     console.log("type", type);
 
     // Extract user's IP address
-    const ipAddress = req.ip;
+    // const ipAddress = req.ip;
+    const ipAddress = requestIp.getClientIp(req);
     // const ipAddress =
     //   req.headers["x-forwarded-for"]?.split(",")[0] ||
     //   req.connection?.remoteAddress;
