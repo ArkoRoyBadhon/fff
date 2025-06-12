@@ -26,12 +26,14 @@ const corsOptions = {
 app.get("/", (req, res) => {
   // res.send("King Mansa backend is working!");
 
-  // console.log("Real IP:", ip);
+  // console.log("req IP:", ip);
+  const ipAddress = req.connection.remoteAddress || req.socket.remoteAddress;
   // console.log("Real IP:", req.headers["X-User-IP"]);
   // res.json(`King Mansa backend is working! on ip: ${req.ip},`});
   res.json({
     message: "King Mansa backend is working!",
     ip: req.ip,
+    ipAddress: ipAddress,
   });
 });
 
