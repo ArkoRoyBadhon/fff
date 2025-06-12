@@ -84,6 +84,9 @@ app.use("/api/rfq", require("../routes/rfqRoutes"));
 app.use("/api/quotations", require("../routes/quotationRoutes"));
 app.use("/api/advertisements", require("../routes/advertisementRoute"));
 
+app.use("/api/analytics", require("../routes/analyticsRoute"));
+app.use("/api/user-activity", require("../routes/userActivityRoute"));
+
 // Start the server
 const PORT = process.env.PORT || 5000;
 httpServer.listen(PORT, () => {

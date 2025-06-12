@@ -1,10 +1,19 @@
 const mongoose = require("mongoose");
 const Advertisement = require("../models/Advertisement");
+const UserActivity = require("../models/UserActivity");
 
 const createAdvertisement = async (req, res) => {
   try {
-    const { title, description, targetKeywords, categories, duration, adType, media } =
-      req.body;
+    const {
+      title,
+      description,
+      targetKeywords,
+      categories,
+      duration,
+      adType,
+      media,
+      product,
+    } = req.body;
 
     if (
       !title ||
@@ -32,7 +41,8 @@ const createAdvertisement = async (req, res) => {
       adType,
       createdBy: req.user.id,
       status: "Draft",
-      media
+      media,
+      product,
     });
 
     const savedAdvertisement = await newAdvertisement.save();
@@ -56,7 +66,10 @@ const updateAdvertisement = async (req, res) => {
       duration,
       adType,
       status,
-      media
+      media,
+      product,
+      budget,
+      spent,
     } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -96,6 +109,10 @@ const updateAdvertisement = async (req, res) => {
     advertisement.adType = adType || advertisement.adType;
     advertisement.status = status || advertisement.status;
     advertisement.media = media || advertisement.media;
+    advertisement.product = product || advertisement.product;
+    advertisement.budget = budget || advertisement.budget;
+    // spent
+    advertisement.spent = advertisement.spent + (spent || 0);
 
     // If status is changing to active, set start and end dates
     if (status === "Active" && advertisement.status !== "Active") {
@@ -127,7 +144,7 @@ const updateAdvertisementAdmin = async (req, res) => {
       duration,
       adType,
       status,
-      media
+      media,
     } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -222,17 +239,42 @@ const deleteAdvertisement = async (req, res) => {
 
 const getAllAdvertisements = async (req, res) => {
   try {
-    const { status } = req.query;
-    const query = {};
+    const { status = "Active", type } = req.query;
 
-    if (status) {
-      query.status = status;
+    console.log("type", type);
+
+    // Extract user's IP address
+    const ipAddress =
+      req.headers["x-forwarded-for"]?.split(",")[0] ||
+      req.connection?.remoteAddress;
+
+    // Fetch user activity
+    const userActivity = await UserActivity.findOne({ ipAddress });
+
+    const query = { status };
+    if (userActivity) {
+      const categoryIds = userActivity.categoryClicks.map((click) =>
+        click.categoryName.toString()
+      );
+      const searchKeywords = userActivity.searches.map((search) =>
+        search.searchString.toLowerCase()
+      );
+
+      query.$or = [
+        { categories: { $in: categoryIds } },
+        { targetKeywords: { $in: searchKeywords } },
+      ];
     }
+
+    // Validate all advertisements
+    const allAdvertisements = await Advertisement.find();
+    await Promise.all(allAdvertisements.map((ad) => ad.checkValidity()));
 
     const advertisements = await Advertisement.find(query)
       .sort({ createdAt: -1 })
       .populate("createdBy", "name email")
-      .populate("categories", "name");
+      .populate("categories", "name")
+      .populate("product");
 
     res.json(advertisements);
   } catch (error) {
@@ -254,7 +296,8 @@ const getAdvertisementsBySeller = async (req, res) => {
 
     const advertisements = await Advertisement.find(query)
       .sort({ createdAt: -1 })
-      .populate("categories", "name");
+      .populate("categories", "name")
+      .populate("product");
 
     res.json(advertisements);
   } catch (error) {
@@ -277,7 +320,8 @@ const getAllAdvertisementsForAdmin = async (req, res) => {
     const advertisements = await Advertisement.find(query)
       .sort({ createdAt: -1 })
       .populate("createdBy", "name email")
-      .populate("categories", "name");
+      .populate("categories", "name")
+      .populate("product");
 
     res.json(advertisements);
   } catch (error) {
@@ -298,7 +342,8 @@ const getAdvertisement = async (req, res) => {
 
     const advertisement = await Advertisement.findById(id)
       .populate("createdBy", "name email")
-      .populate("categories", "name");
+      .populate("categories", "name")
+      .populate("product");
 
     if (!advertisement) {
       return res.status(404).json({ message: "Advertisement not found" });
