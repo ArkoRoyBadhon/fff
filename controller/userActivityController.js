@@ -11,9 +11,9 @@ const logSearch = async (req, res) => {
         .send({ message: "IP address and search string are required." });
     }
 
-    const ipAddress =
-      req.headers["x-forwarded-for"]?.split(",")[0] ||
-      req.connection?.remoteAddress;
+    const ipAddress = req.ip;
+    // req.headers["x-forwarded-for"]?.split(",")[0] ||
+    // req.connection?.remoteAddress;
 
     let userActivity = await UserActivity.findOne({ ipAddress });
 
@@ -57,9 +57,9 @@ const logCategoryClick = async (req, res) => {
       return res.status(400).send({ message: "Category ID is required." });
     }
 
-    const ipAddress =
-      req.headers["x-forwarded-for"]?.split(",")[0] ||
-      req.connection?.remoteAddress;
+    const ipAddress = req.ip;
+    // req.headers["x-forwarded-for"]?.split(",")[0] ||
+    // req.connection?.remoteAddress;
 
     let userActivity = await UserActivity.findOne({ ipAddress });
 

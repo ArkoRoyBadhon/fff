@@ -244,9 +244,12 @@ const getAllAdvertisements = async (req, res) => {
     console.log("type", type);
 
     // Extract user's IP address
-    const ipAddress =
-      req.headers["x-forwarded-for"]?.split(",")[0] ||
-      req.connection?.remoteAddress;
+    const ipAddress = req.ip;
+    // const ipAddress =
+    //   req.headers["x-forwarded-for"]?.split(",")[0] ||
+    //   req.connection?.remoteAddress;
+
+    console.log("ipAddress", ipAddress);
 
     // Fetch user activity
     const userActivity = await UserActivity.findOne({ ipAddress });
