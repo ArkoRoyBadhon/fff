@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Advertisement = require("../models/Advertisement");
 const UserActivity = require("../models/UserActivity");
 const requestIp = require("request-ip");
+
 const createAdvertisement = async (req, res) => {
   try {
     const {
@@ -12,7 +13,9 @@ const createAdvertisement = async (req, res) => {
       duration,
       adType,
       media,
+      budget,
       product,
+      targetCountries,
     } = req.body;
 
     if (
@@ -42,7 +45,9 @@ const createAdvertisement = async (req, res) => {
       createdBy: req.user.id,
       status: "Draft",
       media,
+      budget,
       product,
+      targetCountries,
     });
 
     const savedAdvertisement = await newAdvertisement.save();
@@ -70,6 +75,7 @@ const updateAdvertisement = async (req, res) => {
       product,
       budget,
       spent,
+      targetCountries,
     } = req.body;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
@@ -110,9 +116,11 @@ const updateAdvertisement = async (req, res) => {
     advertisement.status = status || advertisement.status;
     advertisement.media = media || advertisement.media;
     advertisement.product = product || advertisement.product;
-    advertisement.budget = budget || advertisement.budget;
+    advertisement.budget = Number(budget) || advertisement.budget;
     // spent
     advertisement.spent = advertisement.spent + (spent || 0);
+    advertisement.targetCountries =
+      targetCountries || advertisement.targetCountries;
 
     // If status is changing to active, set start and end dates
     if (status === "Active" && advertisement.status !== "Active") {
@@ -184,6 +192,7 @@ const updateAdvertisementAdmin = async (req, res) => {
     advertisement.adType = adType || advertisement.adType;
     advertisement.status = status || advertisement.status;
     advertisement.media = media || advertisement.media;
+    advertisement.targetCountries = advertisement.targetCountries;
 
     // If status is changing to active, set start and end dates
     if (status === "Active" && advertisement.status !== "Active") {
@@ -241,21 +250,20 @@ const getAllAdvertisements = async (req, res) => {
   try {
     const { status = "Active", type } = req.query;
 
-    console.log("type", type);
-
-    // Extract user's IP address
-    // const ipAddress = req.ip;
+    // Extract user's IP address and country from request headers
     const ipAddress = requestIp.getClientIp(req);
-    // const ipAddress =
-    //   req.headers["x-forwarded-for"]?.split(",")[0] ||
-    //   req.connection?.remoteAddress;
+    const userCountry = req.headers["x-country"] || "default-country";
 
-    console.log("ipAddress", ipAddress);
-
-    // Fetch user activity
+    // Fetch user activity based on IP address
     const userActivity = await UserActivity.findOne({ ipAddress });
 
-    const query = { status };
+    // Build the base query with status
+    const baseQuery = { status };
+
+    // Build personalized query conditions
+    const personalizedConditions = [];
+
+    // Add user activity conditions if available
     if (userActivity) {
       const categoryIds = userActivity.categoryClicks.map((click) =>
         click.categoryName.toString()
@@ -264,28 +272,115 @@ const getAllAdvertisements = async (req, res) => {
         search.searchString.toLowerCase()
       );
 
-      query.$or = [
-        { categories: { $in: categoryIds } },
-        { targetKeywords: { $in: searchKeywords } },
-      ];
+      if (categoryIds.length > 0) {
+        personalizedConditions.push({ categories: { $in: categoryIds } });
+      }
+      if (searchKeywords.length > 0) {
+        personalizedConditions.push({
+          targetKeywords: { $in: searchKeywords },
+        });
+      }
     }
 
-    // Validate all advertisements
-    const allAdvertisements = await Advertisement.find();
-    await Promise.all(allAdvertisements.map((ad) => ad.checkValidity()));
+    // Add country targeting condition
+    personalizedConditions.push({ targetCountries: { $in: [userCountry] } });
 
-    const advertisements = await Advertisement.find(query)
+    // Combine conditions with OR logic if there are any personalized conditions
+    const query =
+      personalizedConditions.length > 0
+        ? {
+            ...baseQuery,
+            $or: personalizedConditions,
+          }
+        : baseQuery;
+
+    // First, pause expired ads (only those that should be paused)
+    await Advertisement.updateMany(
+      {
+        status: "Active",
+        approveDate: { $ne: null },
+        $expr: {
+          $gt: [
+            new Date(),
+            {
+              $add: [
+                "$approveDate",
+                { $multiply: ["$duration", 24 * 60 * 60 * 1000] },
+              ],
+            },
+          ],
+        },
+      },
+      { $set: { status: "Paused" } }
+    );
+
+    // Try to fetch personalized ads first
+    let advertisements = await Advertisement.find(query)
       .sort({ createdAt: -1 })
+      .limit(4)
       .populate("createdBy", "name email")
       .populate("categories", "name")
       .populate("product");
 
-    res.json(advertisements);
+    // If no personalized ads found, get random active ads
+    if (advertisements.length === 0) {
+      advertisements = await Advertisement.aggregate([
+        { $match: { status: "Active" } },
+        { $sample: { size: 4 } },
+        {
+          $lookup: {
+            from: "users",
+            localField: "createdBy",
+            foreignField: "_id",
+            as: "createdBy",
+            pipeline: [{ $project: { name: 1, email: 1 } }],
+          },
+        },
+        { $unwind: "$createdBy" },
+        {
+          $lookup: {
+            from: "categories",
+            localField: "categories",
+            foreignField: "_id",
+            as: "categories",
+            pipeline: [{ $project: { name: 1 } }],
+          },
+        },
+        {
+          $lookup: {
+            from: "products",
+            localField: "product",
+            foreignField: "_id",
+            as: "product",
+          },
+        },
+        { $unwind: "$product" },
+      ]);
+    }
+
+    // Record impressions for each advertisement
+    const impressionPromises = advertisements.map(async (ad) => {
+      try {
+        // Convert aggregate result to mongoose document if needed
+        const adDoc = ad._id ? await Advertisement.findById(ad._id) : ad;
+        await adDoc.recordImpression();
+        return adDoc;
+      } catch (err) {
+        console.error("Error recording impression:", err);
+        return ad;
+      }
+    });
+
+    // Wait for all impressions to be recorded
+    const adsWithImpressions = await Promise.all(impressionPromises);
+
+    res.json(adsWithImpressions);
   } catch (error) {
     console.error("Error fetching advertisements:", error);
-    res
-      .status(500)
-      .json({ message: "Server error while fetching advertisements" });
+    res.status(500).json({
+      message: "Server error while fetching advertisements",
+      error: error.message,
+    });
   }
 };
 
@@ -362,6 +457,28 @@ const getAdvertisement = async (req, res) => {
   }
 };
 
+const getActiveAdvertisementsStats = async (req, res) => {
+  const id = req.user?._id;
+  try {
+    const activeAds = await Advertisement.find({
+      status: "Active",
+      createdBy: id,
+    });
+
+    const activeCount = activeAds.length;
+    const totalSpent = activeAds.reduce((acc, ad) => acc + ad.spent, 0);
+
+    // Respond with the results
+    res.status(200).json({
+      activeCount,
+      totalSpent,
+    });
+  } catch (error) {
+    console.error("Error fetching active advertisements stats:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+};
+
 module.exports = {
   createAdvertisement,
   updateAdvertisement,
@@ -371,4 +488,5 @@ module.exports = {
   getAdvertisementsBySeller,
   getAllAdvertisementsForAdmin,
   getAdvertisement,
+  getActiveAdvertisementsStats,
 };

@@ -133,13 +133,12 @@ const getAllProducts = async (req, res) => {
     categoryType,
   } = req.query;
 
-  const ip = req.ip;
-  // const ip =
-  //   req.headers["x-forwarded-for"]?.split(",")[0] ||
-  //   req.connection?.remoteAddress;
+  const ip =
+    req.headers["x-forwarded-for"]?.split(",")[0] ||
+    req.connection?.remoteAddress;
 
-  // console.log("Real IP:", ip);
-  // console.log("Real IP:", req.headers["X-User-IP"]);
+  console.log("Real IP:", ip);
+  console.log("Real IP:", req.headers["X-User-IP"]);
 
   let queryObject = {};
   let sortObject = { _id: -1 };

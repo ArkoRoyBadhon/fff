@@ -86,6 +86,7 @@ app.use("/api/advertisements", require("../routes/advertisementRoute"));
 
 app.use("/api/analytics", require("../routes/analyticsRoute"));
 app.use("/api/user-activity", require("../routes/userActivityRoute"));
+app.use("/api/inquiryList", require("../routes/inquiryListRoute"));
 
 // Start the server
 const PORT = process.env.PORT || 5000;

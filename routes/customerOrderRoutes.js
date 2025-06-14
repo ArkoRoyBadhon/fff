@@ -20,7 +20,7 @@ router.get("/dashboard-stats", protect, BuyerDashboardStats);
 router.get("/get-order-seller", protect, getOrderSeller);
 
 // order admin
-router.get("/admin-order", getOrderAdmin);
+router.get("/admin-order", isAdmin, getOrderAdmin);
 
 //get a order by id
 router.get("/:id", protect, getOrderById);

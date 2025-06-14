@@ -3,7 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const path = require("path");
-const requestIp = require("request-ip");
+
 const app = express();
 
 app.set("trust proxy", 1);
@@ -26,18 +26,17 @@ const corsOptions = {
 app.get("/", (req, res) => {
   // res.send("King Mansa backend is working!");
 
-  // console.log("req IP:", ip);
-  const clientIp = requestIp.getClientIp(req);
-  const ipAddress = req.connection.remoteAddress || req.socket.remoteAddress;
-  console.log("clientIp", clientIp);
+  const ip =
+    req.headers["x-forwarded-for"]?.split(",")[0] ||
+    req.connection?.remoteAddress;
 
-  // console.log("Real IP:", req.headers["X-User-IP"]);
+  console.log("Real IP:", ip);
+  console.log("Real IP:", req.headers["X-User-IP"]);
   // res.json(`King Mansa backend is working! on ip: ${req.ip},`});
   res.json({
     message: "King Mansa backend is working!",
     ip: req.ip,
-    ipAddress: ipAddress,
-    clientIp: clientIp,
+    realip: ip,
   });
 });
 

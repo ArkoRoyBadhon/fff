@@ -8,6 +8,7 @@ const {
   getAllAdvertisementsForAdmin,
   getAdvertisement,
   updateAdvertisementAdmin,
+  getActiveAdvertisementsStats,
 } = require("../controller/AdvertisementController");
 const { protect } = require("../middleware/authMiddleware");
 const { isAdmin } = require("../middleware/adminMiddleware");
@@ -26,6 +27,11 @@ router.get("/", getAllAdvertisements);
 router.get("/seller", protect, getAdvertisementsBySeller);
 
 router.get("/admin", getAllAdvertisementsForAdmin);
+router.get(
+  "/get-active-advertisementstats",
+  protect,
+  getActiveAdvertisementsStats
+);
 
 router.get("/:id", getAdvertisement);
 

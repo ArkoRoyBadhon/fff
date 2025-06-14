@@ -274,16 +274,20 @@ const getOrderSeller = async (req, res) => {
 };
 const getOrderAdmin = async (req, res) => {
   try {
-    // console.log("getOrderCustomer");
-    const { page, limit } = req.query;
+    const { page, limit, status } = req.query;
 
     const pages = Number(page) || 1;
     const limits = Number(limit) || 8;
     const skip = (pages - 1) * limits;
 
-    const totalDoc = await Order.countDocuments({});
+    const baseConditions = {};
+    if (status && status !== "All") {
+      baseConditions.status = status;
+    }
 
-    // total padding order count
+    const totalDoc = await Order.countDocuments(baseConditions);
+
+    // Aggregate counts for different statuses
     const totalPendingOrder = await Order.aggregate([
       {
         $match: {
@@ -294,14 +298,11 @@ const getOrderAdmin = async (req, res) => {
         $group: {
           _id: null,
           total: { $sum: "$total" },
-          count: {
-            $sum: 1,
-          },
+          count: { $sum: 1 },
         },
       },
     ]);
 
-    // total padding order count
     const totalProcessingOrder = await Order.aggregate([
       {
         $match: {
@@ -312,9 +313,7 @@ const getOrderAdmin = async (req, res) => {
         $group: {
           _id: null,
           total: { $sum: "$total" },
-          count: {
-            $sum: 1,
-          },
+          count: { $sum: 1 },
         },
       },
     ]);
@@ -322,25 +321,20 @@ const getOrderAdmin = async (req, res) => {
     const totalDeliveredOrder = await Order.aggregate([
       {
         $match: {
-          status: "Delivered",
+          status: "Completed",
         },
       },
       {
         $group: {
           _id: null,
           total: { $sum: "$total" },
-          count: {
-            $sum: 1,
-          },
+          count: { $sum: 1 },
         },
       },
     ]);
 
-    // today order amount
-    // const userType = await User.findById(req.user._id);
-
-    let orders;
-    orders = await Order.find({})
+    // Fetch filtered orders
+    const orders = await Order.find(baseConditions)
       .populate("product")
       .populate("rfqId")
       .populate("quoteId")
@@ -357,7 +351,6 @@ const getOrderAdmin = async (req, res) => {
         totalProcessingOrder.length === 0 ? 0 : totalProcessingOrder[0].count,
       delivered:
         totalDeliveredOrder.length === 0 ? 0 : totalDeliveredOrder[0].count,
-
       totalDoc,
     });
   } catch (err) {
@@ -366,6 +359,7 @@ const getOrderAdmin = async (req, res) => {
     });
   }
 };
+
 const getOrderById = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)

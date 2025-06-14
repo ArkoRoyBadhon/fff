@@ -1,31 +1,6 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
-// Pricing configuration
-const PRICING = {
-  media: {
-    image: 5, // $5 per image
-    video: 10, // $10 per video
-  },
-  duration: {
-    3: 15, // $15 for 3 days
-    7: 25, // $25 for 7 days
-    10: 35,
-    15: 45,
-    21: 60,
-    30: 80,
-  },
-  adType: {
-    search: 0, // no additional cost
-    landing: 15, // $15 extra for landing page ads
-    other: 10, // $10 extra for other pages
-  },
-  category: {
-    base: 5, // $5 for first category
-    additional: 2, // $2 for each additional category
-  },
-};
-
 // Metric schema for time-based tracking
 const metricSchema = new Schema({
   date: {
@@ -70,6 +45,12 @@ const advertisementSchema = new Schema(
         type: String,
         trim: true,
         lowercase: true,
+      },
+    ],
+    targetCountries: [
+      {
+        type: String,
+        trim: true,
       },
     ],
     categories: [
@@ -147,13 +128,6 @@ const advertisementSchema = new Schema(
       type: Number,
       default: 0,
     },
-    pricingBreakdown: {
-      mediaCost: { type: Number, default: 0 },
-      durationCost: { type: Number, default: 0 },
-      adTypeCost: { type: Number, default: 0 },
-      categoryCost: { type: Number, default: 0 },
-      totalCost: { type: Number, default: 0 },
-    },
     dailyMetrics: [metricSchema],
     monthlyMetrics: [metricSchema],
   },
@@ -185,70 +159,69 @@ advertisementSchema.pre("save", function (next) {
     this.approveDate = new Date();
   }
 
-  if (
-    this.isModified("media") ||
-    this.isModified("duration") ||
-    this.isModified("adType") ||
-    this.isModified("categories")
-  ) {
-    this.calculatePricing();
-  }
-
-  if (this.budget === 0) {
-    this.budget = this.pricingBreakdown.totalCost;
-  }
-
   next();
 });
 
 advertisementSchema.methods.checkValidity = async function () {
   if (this.approveDate) {
+    // Calculate validity end date in UTC
     const validityEndDate = new Date(
       this.approveDate.getTime() + this.duration * 24 * 60 * 60 * 1000
     );
-    if (new Date() > validityEndDate) {
+
+    // Get the current date in UTC
+    const currentDate = new Date();
+
+    console.log("approveDate:", this.approveDate.toISOString());
+    console.log("validityEndDate:", validityEndDate.toISOString());
+    console.log("currentDate:", currentDate.toISOString());
+
+    // Compare dates
+    if (currentDate > validityEndDate) {
+      console.log("Ad is now paused due to expiration.");
       this.status = "Paused";
       await this.save();
     }
   }
 };
 
-// Method to calculate pricing
-advertisementSchema.methods.calculatePricing = function () {
-  const mediaCost = this.media.reduce((total, item) => {
-    return total + PRICING.media[item.mediaType];
-  }, 0);
-
-  const durationCost = PRICING.duration[this.duration] || 0;
-  const adTypeCost = PRICING.adType[this.adType] || 0;
-
-  const categoryCount = this.categories.length;
-  const categoryCost =
-    categoryCount > 0
-      ? PRICING.category.base +
-        (categoryCount - 1) * PRICING.category.additional
-      : 0;
-
-  const totalCost = mediaCost + durationCost + adTypeCost + categoryCost;
-
-  this.pricingBreakdown = {
-    mediaCost,
-    durationCost,
-    adTypeCost,
-    categoryCost,
-    totalCost,
-  };
-
-  return this.pricingBreakdown;
-};
+advertisementSchema.add({
+  pricePerImpression: {
+    type: Number,
+    required: true,
+    default: 0.01, // Example: $0.01 per impression
+  },
+});
 
 // Method to record an impression
-advertisementSchema.methods.recordImpression = function () {
+advertisementSchema.methods.recordImpression = async function () {
   const now = new Date();
-  this.impressions += 1;
-  this.updateTimeBasedMetric("dailyMetrics", now);
-  this.updateTimeBasedMetric("monthlyMetrics", now, true);
-  this.calculateCTR();
+
+  // Check if the budget allows recording another impression
+  const remainingBudget = this.budget - this.spent;
+  if (remainingBudget >= this.pricePerImpression) {
+    // Increment the impressions count and update metrics
+    this.impressions += 1;
+    this.spent += this.pricePerImpression;
+
+    this.updateTimeBasedMetric("dailyMetrics", now);
+    this.updateTimeBasedMetric("monthlyMetrics", now, true);
+
+    // Recalculate the CTR
+    this.calculateCTR();
+
+    // Check if the spent budget equals or exceeds the total budget
+    if (this.spent >= this.budget) {
+      this.status = "Paused"; // Pause the ad if budget is spent
+    }
+
+    // Save the changes
+    await this.save();
+  } else {
+    // Pause the ad if budget is insufficient
+    this.status = "Paused";
+    await this.save();
+  }
 };
 
 // Method to record a click
