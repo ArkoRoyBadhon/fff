@@ -210,6 +210,24 @@ const getOrderSeller = async (req, res) => {
     const totalProcessingOrder = await Order.aggregate([
       {
         $match: {
+          status: { $in: ["Pending", "Processing", "Shipped"] },
+          seller: mongoose.Types.ObjectId(req.user._id),
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$total" },
+          count: {
+            $sum: 1,
+          },
+        },
+      },
+    ]);
+
+    const totalCancelledOrder = await Order.aggregate([
+      {
+        $match: {
           status: { $in: ["Cancelled", "Return"] },
           seller: mongoose.Types.ObjectId(req.user._id),
         },
@@ -260,10 +278,11 @@ const getOrderSeller = async (req, res) => {
       pages,
       ongoing: totalPendingOrder.length === 0 ? 0 : totalPendingOrder[0].count,
       completed:
-        totalProcessingOrder.length === 0 ? 0 : totalProcessingOrder[0].count,
-      cancelled:
         totalDeliveredOrder.length === 0 ? 0 : totalDeliveredOrder[0].count,
-
+      cancelled:
+        totalCancelledOrder.length === 0 ? 0 : totalCancelledOrder[0].count,
+      orderValue:
+        totalProcessingOrder.length === 0 ? 0 : totalProcessingOrder[0].total,
       totalDoc,
     });
   } catch (err) {

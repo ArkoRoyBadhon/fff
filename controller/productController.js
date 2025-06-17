@@ -3,6 +3,9 @@ const mongoose = require("mongoose");
 const Category = require("../models/Category");
 const { languageCodes } = require("../utils/data");
 const User = require("../models/User");
+const requestIp = require("request-ip");
+const StoreSetup = require("../models/StoreSetup");
+const Catalog = require("../models/Catalog");
 
 const addProduct = async (req, res) => {
   try {
@@ -251,6 +254,183 @@ const getAllProducts = async (req, res) => {
   } catch (err) {
     res.status(500).json({
       message: err.message,
+      error: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    });
+  }
+};
+
+const getAllProductsAdmin = async (req, res) => {
+  const {
+    search,
+    category,
+    subCategory,
+    subSubCategory,
+    minOrder,
+    status,
+    price,
+    minPrice,
+    maxPrice,
+    country,
+    page = 1,
+    limit = 10,
+  } = req.query;
+
+  let queryObject = {};
+  let sortObject = { _id: -1 };
+
+  if (search) {
+    try {
+      const searchRegex = new RegExp(search, "i");
+
+      const matchingStores = await StoreSetup.find({
+        storeName: searchRegex,
+      });
+
+      const storeIds = matchingStores.map((store) => store._id);
+
+      const matchingCatalogs = await Catalog.find({
+        storeId: { $in: storeIds },
+      })
+        .select("_id")
+        .lean();
+
+      const matchingSellers = await User.find({
+        companyName: searchRegex,
+      })
+        .select("_id")
+        .lean();
+
+      const catalogIds = matchingCatalogs.map((catalog) => catalog._id);
+      const sellerIds = matchingSellers.map((seller) => seller._id);
+
+      queryObject.$or = [
+        { title: searchRegex },
+        { description: searchRegex },
+        // { "seller?.companyName": searchRegex },
+        ...(sellerIds.length > 0 ? [{ seller: { $in: sellerIds } }] : []),
+        ...(catalogIds.length > 0 ? [{ catalog: { $in: catalogIds } }] : []),
+      ];
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        message: "Error processing search",
+        error: err.message,
+      });
+    }
+  }
+
+  if (category) {
+    queryObject.category = new mongoose.Types.ObjectId(category);
+  }
+
+  if (subCategory) {
+    queryObject.subCategory = new mongoose.Types.ObjectId(subCategory);
+  }
+
+  if (subSubCategory) {
+    queryObject.subSubCategory = new mongoose.Types.ObjectId(subSubCategory);
+  }
+
+  if (minOrder) {
+    queryObject.minOrder = { $gte: Number(minOrder) };
+  }
+
+  if (status) {
+    queryObject.status = status;
+  }
+
+  if (minPrice || maxPrice) {
+    queryObject.price = {};
+    if (minPrice) queryObject.price.$gte = Number(minPrice);
+    if (maxPrice) queryObject.price.$lte = Number(maxPrice);
+  }
+
+  if (price === "low") {
+    sortObject = { price: 1 };
+  } else if (price === "high") {
+    sortObject = { price: -1 };
+  }
+
+  let sellerIds = null;
+  if (country) {
+    try {
+      const sellers = await User.find({
+        country: { $regex: new RegExp(`^${country}$`, "i") },
+      }).select("_id");
+      sellerIds = sellers.map((s) => s._id);
+    } catch (err) {
+      return res.status(500).json({
+        message: "Error fetching sellers by country",
+        error: err.message,
+      });
+    }
+  }
+
+  if (sellerIds) {
+    queryObject.seller = { $in: sellerIds };
+  } else if (country) {
+    return res.json({
+      products: [],
+      total: 0,
+      limits: Number(limit),
+      pages: Number(page),
+    });
+  }
+
+  try {
+    const total = await Product.countDocuments(queryObject);
+
+    const totalProducts = await Product.countDocuments();
+
+    const activeProductsCount = await Product.countDocuments({
+      ...queryObject,
+      status: "show",
+    });
+
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const newProductsWeekCount = await Product.countDocuments({
+      ...queryObject,
+      createdAt: { $gte: oneWeekAgo },
+    });
+
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    const newProductsMonthCount = await Product.countDocuments({
+      ...queryObject,
+      createdAt: { $gte: oneMonthAgo },
+    });
+
+    const products = await Product.find(queryObject)
+      .populate("seller", "companyName country")
+      .populate({
+        path: "catalog",
+        populate: {
+          path: "storeId",
+          model: "Store",
+        },
+      })
+      .sort(sortObject);
+    // .skip((Number(page) - 1) * Number(limit))
+    // .limit(Number(limit));
+
+    res.json({
+      success: true,
+      products,
+      stats: {
+        totalProducts,
+        activeProducts: activeProductsCount,
+        newProductsWeek: newProductsWeekCount,
+        newProductsMonth: newProductsMonthCount,
+      },
+      total,
+      limits: Number(limit),
+      pages: Math.ceil(total / Number(limit)),
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: "Error fetching products",
       error: process.env.NODE_ENV === "development" ? err.stack : undefined,
     });
   }
@@ -596,6 +776,7 @@ module.exports = {
   addProduct,
   addAllProducts,
   getAllProducts,
+  getAllProductsAdmin,
   getShowingProductsforCatalog,
   getShowingProducts,
   getProductById,

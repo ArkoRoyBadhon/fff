@@ -14,6 +14,7 @@ const sectionSchema = new mongoose.Schema({
       "expandMarket",
       "contact",
       "partners",
+      "footer",
     ],
     unique: true,
   },

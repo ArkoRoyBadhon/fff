@@ -124,6 +124,61 @@ const initializeSections = async () => {
         ],
       },
     },
+    {
+      sectionType: "footer",
+      data: {
+        logo: "https://example.com/logo.png",
+        phone: "+1-800-555-1234",
+        address: "123 Main Street, Springfield, USA",
+        socialLinks: {
+          facebook: "https://facebook.com/example",
+          instagram: "https://instagram.com/example",
+          tiktok: "https://tiktok.com/@example",
+          twitter: "https://twitter.com/example",
+        },
+        linkSections: [
+          {
+            title: "Company",
+            links: [
+              {
+                label: "About Us",
+                url: "https://example.com/about",
+              },
+              {
+                label: "Careers",
+                url: "https://example.com/careers",
+              },
+              {
+                label: "Contact",
+                url: "https://example.com/contact",
+              },
+            ],
+          },
+          {
+            title: "Support",
+            links: [
+              {
+                label: "Help Center",
+                url: "https://example.com/help",
+              },
+              {
+                label: "Privacy Policy",
+                url: "https://example.com/privacy",
+              },
+              {
+                label: "Terms of Service",
+                url: "https://example.com/terms",
+              },
+            ],
+          },
+        ],
+        newsletterTitle: "Stay Updated",
+        newsletterDescription:
+          "Subscribe to our newsletter to receive the latest updates and offers.",
+        playStoreImage: "https://example.com/playstore-badge.png",
+        appStoreImage: "https://example.com/appstore-badge.png",
+      },
+    },
   ];
 
   try {
@@ -191,81 +246,6 @@ exports.getSection = async (req, res) => {
   }
 };
 
-// exports.updateSection = async (req, res) => {
-//   try {
-//     const validSections = [
-//       "hero",
-//       "join",
-//       "howWork",
-//       "import",
-//       "discover",
-//       "expandMarket",
-//       "contact",
-//       "partners",
-//     ];
-
-//     if (!validSections.includes(req.params.sectionType)) {
-//       return res.status(400).json({
-//         success: false,
-//         message: "Invalid section type",
-//       });
-//     }
-
-//     if (req.params.sectionType === "howWork" && req.body.steps) {
-//       if (!Array.isArray(req.body.steps)) {
-//         return res.status(400).json({
-//           success: false,
-//           message: "Steps must be an array",
-//         });
-//       }
-//     }
-
-//     if (req.params.sectionType === "discover" && req.body.categories) {
-//       if (!Array.isArray(req.body.categories)) {
-//         return res.status(400).json({
-//           success: false,
-//           message: "Categories must be an array",
-//         });
-//       }
-//     }
-
-//     if (req.params.sectionType === "partners" && req.body.animationDuration) {
-//       if (
-//         typeof req.body.animationDuration !== "number" ||
-//         req.body.animationDuration <= 0
-//       ) {
-//         return res.status(400).json({
-//           success: false,
-//           message: "Animation duration must be a positive number",
-//         });
-//       }
-//     }
-
-//     const section = await LandingPage.findOneAndUpdate(
-//       { sectionType: req.params.sectionType },
-//       { $set: { data: req.body } },
-//       {
-//         new: true,
-//         runValidators: true,
-//         upsert: true,
-//       }
-//     );
-
-//     res.json({
-//       success: true,
-//       message: "Section updated successfully",
-//       data: section.data,
-//     });
-//   } catch (err) {
-//     console.error(`Error updating ${req.params.sectionType} section:`, err);
-//     res.status(400).json({
-//       success: false,
-//       message: "Failed to update section",
-//       error: err.message,
-//     });
-//   }
-// };
-
 exports.updateSection = async (req, res) => {
   try {
     const validSections = [
@@ -277,6 +257,7 @@ exports.updateSection = async (req, res) => {
       "expandMarket",
       "contact",
       "partners",
+      "footer",
     ];
 
     if (!validSections.includes(req.params.sectionType)) {
@@ -295,7 +276,6 @@ exports.updateSection = async (req, res) => {
         });
       }
 
-      // Extract step icons from root level and add them to steps array
       const processedData = { ...req.body };
       if (req.body.steps) {
         processedData.steps = req.body.steps.map((step, index) => {
@@ -306,7 +286,6 @@ exports.updateSection = async (req, res) => {
           };
         });
 
-        // Remove the temporary step icon fields from root
         Object.keys(processedData).forEach((key) => {
           if (key.startsWith("steps[") && key.endsWith("].icon")) {
             delete processedData[key];
@@ -331,7 +310,6 @@ exports.updateSection = async (req, res) => {
       });
     }
 
-    // Handle other section types normally
     const section = await LandingPage.findOneAndUpdate(
       { sectionType: req.params.sectionType },
       { $set: { data: req.body } },

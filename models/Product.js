@@ -119,7 +119,7 @@ const productSchema = new mongoose.Schema(
     status: {
       type: String,
       default: "show",
-      enum: ["show", "hide"],
+      enum: ["show", "draft"],
     },
     price: {
       type: Number,

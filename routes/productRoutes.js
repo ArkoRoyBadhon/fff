@@ -15,8 +15,10 @@ const {
   getShowingStoreProducts,
   getShowingProductsforCatalog,
   getStoreProducts,
+  getAllProductsAdmin,
 } = require("../controller/productController");
 const { protect } = require("../middleware/authMiddleware");
+const { isAdmin } = require("../middleware/adminMiddleware");
 
 //add a product
 // router.post("/add", protect, addProduct);
@@ -38,6 +40,7 @@ router.get("/store-products/:id", getStoreProducts);
 
 //get all products
 router.get("/", getAllProducts);
+router.get("/admin", getAllProductsAdmin);
 
 //get a product by slug
 router.get("/product-by-slug/:slug", getProductBySlug);
@@ -49,7 +52,7 @@ router.patch("/:id", protect, updateProduct);
 router.patch("/update/many", updateManyProducts);
 
 //update a product status
-router.put("/status/:id", updateStatus);
+router.patch("/status/:id", isAdmin, updateStatus);
 
 //delete a product
 router.delete("/:id", deleteProduct);
