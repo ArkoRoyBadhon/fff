@@ -1,7 +1,6 @@
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
-// Metric schema for time-based tracking
 const metricSchema = new Schema({
   date: {
     type: Date,
