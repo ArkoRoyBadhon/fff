@@ -250,20 +250,15 @@ const getAllAdvertisements = async (req, res) => {
   try {
     const { status = "Active", type } = req.query;
 
-    // Extract user's IP address and country from request headers
     const ipAddress = requestIp.getClientIp(req);
     const userCountry = req.headers["x-country"] || "default-country";
 
-    // Fetch user activity based on IP address
     const userActivity = await UserActivity.findOne({ ipAddress });
 
-    // Build the base query with status
     const baseQuery = { status };
 
-    // Build personalized query conditions
     const personalizedConditions = [];
 
-    // Add user activity conditions if available
     if (userActivity) {
       const categoryIds = userActivity.categoryClicks.map((click) =>
         click.categoryName.toString()
@@ -282,10 +277,8 @@ const getAllAdvertisements = async (req, res) => {
       }
     }
 
-    // Add country targeting condition
     personalizedConditions.push({ targetCountries: { $in: [userCountry] } });
 
-    // Combine conditions with OR logic if there are any personalized conditions
     const query =
       personalizedConditions.length > 0
         ? {
@@ -294,7 +287,6 @@ const getAllAdvertisements = async (req, res) => {
           }
         : baseQuery;
 
-    // First, pause expired ads (only those that should be paused)
     await Advertisement.updateMany(
       {
         status: "Active",
@@ -361,7 +353,6 @@ const getAllAdvertisements = async (req, res) => {
     // Record impressions for each advertisement
     const impressionPromises = advertisements.map(async (ad) => {
       try {
-        // Convert aggregate result to mongoose document if needed
         const adDoc = ad._id ? await Advertisement.findById(ad._id) : ad;
         await adDoc.recordImpression();
         return adDoc;

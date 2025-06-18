@@ -28,6 +28,7 @@ const createTransaction = async (req, res) => {
       amount,
       description,
       reference,
+      commission: amount * 0.01,
     });
 
     res.status(201).json(transaction);

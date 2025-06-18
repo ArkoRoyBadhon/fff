@@ -45,6 +45,10 @@ const transactionSchema = new mongoose.Schema(
     amount: {
       type: Number,
     },
+    commision: {
+      type: Number,
+      default: 0,
+    },
     refund: {
       isRefunded: { type: Boolean, default: false },
       refundedAmount: { type: Number, default: 0 },

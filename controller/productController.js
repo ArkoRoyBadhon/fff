@@ -273,32 +273,26 @@ const getAllProductsAdmin = async (req, res) => {
     country,
     page = 1,
     limit = 10,
+    period,
   } = req.query;
 
   let queryObject = {};
-  let sortObject = { _id: -1 };
+  let sortObject = { sold: -1 };
 
+  // Search
   if (search) {
     try {
       const searchRegex = new RegExp(search, "i");
-
-      const matchingStores = await StoreSetup.find({
-        storeName: searchRegex,
-      });
-
+      const matchingStores = await StoreSetup.find({ storeName: searchRegex });
       const storeIds = matchingStores.map((store) => store._id);
 
       const matchingCatalogs = await Catalog.find({
         storeId: { $in: storeIds },
-      })
-        .select("_id")
-        .lean();
+      }).select("_id");
 
       const matchingSellers = await User.find({
         companyName: searchRegex,
-      })
-        .select("_id")
-        .lean();
+      }).select("_id");
 
       const catalogIds = matchingCatalogs.map((catalog) => catalog._id);
       const sellerIds = matchingSellers.map((seller) => seller._id);
@@ -306,7 +300,6 @@ const getAllProductsAdmin = async (req, res) => {
       queryObject.$or = [
         { title: searchRegex },
         { description: searchRegex },
-        // { "seller?.companyName": searchRegex },
         ...(sellerIds.length > 0 ? [{ seller: { $in: sellerIds } }] : []),
         ...(catalogIds.length > 0 ? [{ catalog: { $in: catalogIds } }] : []),
       ];
@@ -319,100 +312,89 @@ const getAllProductsAdmin = async (req, res) => {
     }
   }
 
-  if (category) {
-    queryObject.category = new mongoose.Types.ObjectId(category);
+  if (req.query.period) {
+    const now = new Date();
+    let startDate;
+
+    if (req.query.period === "year") {
+      startDate = new Date(now.getFullYear(), 0, 1); // Start of the year
+    } else if (req.query.period === "month") {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1); // Start of the month
+    }
+
+    if (startDate) {
+      queryObject.createdAt = { $gte: startDate }; // Filter products created since `startDate`
+    }
   }
 
-  if (subCategory) {
+  // Filters
+  if (category) queryObject.category = new mongoose.Types.ObjectId(category);
+  if (subCategory)
     queryObject.subCategory = new mongoose.Types.ObjectId(subCategory);
-  }
-
-  if (subSubCategory) {
+  if (subSubCategory)
     queryObject.subSubCategory = new mongoose.Types.ObjectId(subSubCategory);
-  }
-
-  if (minOrder) {
-    queryObject.minOrder = { $gte: Number(minOrder) };
-  }
-
-  if (status) {
-    queryObject.status = status;
-  }
-
+  if (minOrder) queryObject.minOrder = { $gte: Number(minOrder) };
+  if (status) queryObject.status = status;
   if (minPrice || maxPrice) {
     queryObject.price = {};
     if (minPrice) queryObject.price.$gte = Number(minPrice);
     if (maxPrice) queryObject.price.$lte = Number(maxPrice);
   }
 
-  if (price === "low") {
-    sortObject = { price: 1 };
-  } else if (price === "high") {
-    sortObject = { price: -1 };
-  }
+  // Sorting
+  if (price === "low") sortObject = { price: 1 };
+  if (price === "high") sortObject = { price: -1 };
 
-  let sellerIds = null;
+  // Country Filter
   if (country) {
-    try {
-      const sellers = await User.find({
-        country: { $regex: new RegExp(`^${country}$`, "i") },
-      }).select("_id");
-      sellerIds = sellers.map((s) => s._id);
-    } catch (err) {
-      return res.status(500).json({
-        message: "Error fetching sellers by country",
-        error: err.message,
+    const sellers = await User.find({
+      country: { $regex: new RegExp(`^${country}$`, "i") },
+    }).select("_id");
+    if (sellers.length > 0) {
+      queryObject.seller = { $in: sellers.map((s) => s._id) };
+    } else {
+      return res.json({
+        success: true,
+        products: [],
+        stats: {},
+        total: 0,
+        limits: Number(limit),
+        pages: 0,
       });
     }
   }
 
-  if (sellerIds) {
-    queryObject.seller = { $in: sellerIds };
-  } else if (country) {
-    return res.json({
-      products: [],
-      total: 0,
-      limits: Number(limit),
-      pages: Number(page),
-    });
-  }
-
   try {
-    const total = await Product.countDocuments(queryObject);
-
-    const totalProducts = await Product.countDocuments();
-
-    const activeProductsCount = await Product.countDocuments({
-      ...queryObject,
-      status: "show",
-    });
-
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const newProductsWeekCount = await Product.countDocuments({
-      ...queryObject,
-      createdAt: { $gte: oneWeekAgo },
-    });
-
-    const oneMonthAgo = new Date();
-    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-    const newProductsMonthCount = await Product.countDocuments({
-      ...queryObject,
-      createdAt: { $gte: oneMonthAgo },
-    });
-
-    const products = await Product.find(queryObject)
-      .populate("seller", "companyName country")
-      .populate({
-        path: "catalog",
-        populate: {
-          path: "storeId",
-          model: "Store",
-        },
-      })
-      .sort(sortObject);
-    // .skip((Number(page) - 1) * Number(limit))
-    // .limit(Number(limit));
+    // Fetch stats and products
+    const [
+      total,
+      totalProducts,
+      activeProductsCount,
+      newProductsWeekCount,
+      newProductsMonthCount,
+      products,
+    ] = await Promise.all([
+      Product.countDocuments(queryObject),
+      Product.countDocuments(),
+      Product.countDocuments({ ...queryObject, status: "show" }),
+      Product.countDocuments({
+        ...queryObject,
+        createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+      }),
+      Product.countDocuments({
+        ...queryObject,
+        createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+      }),
+      Product.find(queryObject)
+        .populate("seller", "companyName country")
+        .populate({
+          path: "catalog",
+          populate: { path: "storeId", model: "Store" },
+        })
+        .sort(sortObject)
+        .skip((Number(page) - 1) * Number(limit))
+        .limit(Number(limit)),
+    ]);
 
     res.json({
       success: true,
@@ -431,7 +413,7 @@ const getAllProductsAdmin = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error fetching products",
-      error: process.env.NODE_ENV === "development" ? err.stack : undefined,
+      error: err.message,
     });
   }
 };

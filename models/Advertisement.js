@@ -128,6 +128,10 @@ const advertisementSchema = new Schema(
       type: Number,
       default: 0,
     },
+    totalSpent: {
+      type: Number,
+      default: 0,
+    },
     dailyMetrics: [metricSchema],
     monthlyMetrics: [metricSchema],
   },
@@ -203,6 +207,7 @@ advertisementSchema.methods.recordImpression = async function () {
     // Increment the impressions count and update metrics
     this.impressions += 1;
     this.spent += this.pricePerImpression;
+    this.totalSpent += this.pricePerImpression;
 
     this.updateTimeBasedMetric("dailyMetrics", now);
     this.updateTimeBasedMetric("monthlyMetrics", now, true);
