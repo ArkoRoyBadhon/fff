@@ -39,7 +39,7 @@ const catalogSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["pending", "approved", "rejected"],
+    enum: ["pending", "deactive", "approved", "rejected"],
     default: "pending",
   },
   rejectionReasons: [

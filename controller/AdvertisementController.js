@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const Advertisement = require("../models/Advertisement");
 const UserActivity = require("../models/UserActivity");
 const requestIp = require("request-ip");
+const createNotificationFunc = require("../utils/createNotification");
 
 const createAdvertisement = async (req, res) => {
   try {
@@ -144,6 +145,7 @@ const updateAdvertisement = async (req, res) => {
 const updateAdvertisementAdmin = async (req, res) => {
   try {
     const { id } = req.params;
+
     const {
       title,
       description,
@@ -159,18 +161,10 @@ const updateAdvertisementAdmin = async (req, res) => {
       return res.status(400).json({ message: "Invalid advertisement ID" });
     }
 
-    const advertisement = await Advertisement.findById(id);
+    const advertisement = await Advertisement.findById(id).populate("product");
+
     if (!advertisement) {
       return res.status(404).json({ message: "Advertisement not found" });
-    }
-
-    if (
-      advertisement.createdBy.toString() !== req.user.id &&
-      req.user.role !== "admin"
-    ) {
-      return res
-        .status(403)
-        .json({ message: "Not authorized to update this advertisement" });
     }
 
     // Update fields
@@ -203,8 +197,18 @@ const updateAdvertisementAdmin = async (req, res) => {
         )
       );
     }
-
     const updatedAdvertisement = await advertisement.save();
+
+    await createNotificationFunc(
+      advertisement?.product?.seller,
+      "seller",
+      "info",
+      "advertisement",
+      `Advertisement (${advertisement?.title}) set ${status} by Admin`,
+      `/seller/campaigns/${updatedAdvertisement?._id}`,
+      { modification: updatedAdvertisement?._id }
+    );
+
     res.json(updatedAdvertisement);
   } catch (error) {
     console.error("Error updating advertisement:", error);
@@ -222,7 +226,7 @@ const deleteAdvertisement = async (req, res) => {
       return res.status(400).json({ message: "Invalid advertisement ID" });
     }
 
-    const advertisement = await Advertisement.findById(id);
+    const advertisement = await Advertisement.findById(id).populate("product");
     if (!advertisement) {
       return res.status(404).json({ message: "Advertisement not found" });
     }
@@ -236,7 +240,17 @@ const deleteAdvertisement = async (req, res) => {
         .json({ message: "Not authorized to delete this advertisement" });
     }
 
-    await Advertisement.findByIdAndDelete(id);
+    // await Advertisement.findByIdAndDelete(id);
+
+    await createNotificationFunc(
+      advertisement?.product?.seller,
+      "seller",
+      "info",
+      "advertisement",
+      `Advertisement (${advertisement?.title}) deleted`,
+      "#",
+      { modification: advertisement?._id }
+    );
     res.json({ message: "Advertisement deleted successfully" });
   } catch (error) {
     console.error("Error deleting advertisement:", error);
@@ -411,7 +425,10 @@ const getAllAdvertisementsForAdmin = async (req, res) => {
       .sort({ createdAt: -1 })
       .populate("createdBy", "name email")
       .populate("categories", "name")
-      .populate("product");
+      .populate({
+        path: "product",
+        populate: { path: "seller", model: "User" },
+      });
 
     res.json(advertisements);
   } catch (error) {
@@ -433,7 +450,10 @@ const getAdvertisement = async (req, res) => {
     const advertisement = await Advertisement.findById(id)
       .populate("createdBy", "name email")
       .populate("categories", "name")
-      .populate("product");
+      .populate({
+        path: "product",
+        populate: { path: "seller", model: "User" },
+      });
 
     if (!advertisement) {
       return res.status(404).json({ message: "Advertisement not found" });

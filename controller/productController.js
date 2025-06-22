@@ -6,6 +6,7 @@ const User = require("../models/User");
 const requestIp = require("request-ip");
 const StoreSetup = require("../models/StoreSetup");
 const Catalog = require("../models/Catalog");
+const Order = require("../models/Order");
 
 const addProduct = async (req, res) => {
   try {
@@ -134,6 +135,8 @@ const getAllProducts = async (req, res) => {
     limit = 10,
     searchTerm,
     categoryType,
+
+    period,
   } = req.query;
 
   const ip =
@@ -245,6 +248,153 @@ const getAllProducts = async (req, res) => {
       .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit));
 
+    let queryObjectOrder = {};
+    if (period) {
+      const now = new Date();
+      let startDate;
+
+      if (period === "year") {
+        startDate = new Date(now.getFullYear(), 0, 1); // Start of the year
+      } else if (period === "month") {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1); // Start of the month
+      }
+
+      if (startDate) {
+        queryObjectOrder.createdAt = { $gte: startDate };
+      }
+    }
+
+    const orderData = await Order.find(queryObjectOrder);
+
+    console.log("order data ===", orderData);
+
+    res.json({
+      products,
+      total,
+      limits: Number(limit),
+      pages: Number(page),
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: err.message,
+      error: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    });
+  }
+};
+
+const YearlyProductController = async (req, res) => {
+  const { page = 1, limit = 10, period } = req.query;
+
+  let queryObject = {};
+  let sortObject = { _id: -1 }; // Default sort
+
+  try {
+    const total = await Product.countDocuments(queryObject);
+
+    const now = new Date();
+
+    const yearlyStartDate = new Date(now.getFullYear(), 0, 1);
+    const yearlyOrderFilter = {
+      createdAt: { $gte: yearlyStartDate },
+      status: { $nin: ["Cancelled", "Return"] },
+    };
+
+    const monthlyStartDate = new Date();
+    monthlyStartDate.setDate(monthlyStartDate.getDate() - 29);
+    const monthlyOrderFilter = {
+      createdAt: { $gte: monthlyStartDate },
+      status: { $nin: ["Cancelled", "Return"] },
+    };
+
+    // Get orders with total amount
+    const [yearlyOrders, monthlyOrders] = await Promise.all([
+      Order.find(yearlyOrderFilter).select("product quantity status total"),
+      Order.find(monthlyOrderFilter).select("product quantity status total"),
+    ]);
+
+    // Calculate product quantities and totals
+    const yearlyProductStats = yearlyOrders.reduce((acc, order) => {
+      if (order.product) {
+        const productId = order.product.toString();
+        acc[productId] = acc[productId] || { quantity: 0, totalAmount: 0 };
+        acc[productId].quantity += order.quantity;
+        acc[productId].totalAmount += order.total || 0;
+      }
+      return acc;
+    }, {});
+
+    const monthlyProductStats = monthlyOrders.reduce((acc, order) => {
+      if (order.product) {
+        const productId = order.product.toString();
+        acc[productId] = acc[productId] || { quantity: 0, totalAmount: 0 };
+        acc[productId].quantity += order.quantity;
+        acc[productId].totalAmount += order.total || 0;
+      }
+      return acc;
+    }, {});
+
+    let products = await Product.find(queryObject)
+      .populate("seller")
+      .populate({
+        path: "catalog",
+        populate: {
+          path: "storeId",
+          model: "Store",
+          select:
+            "storeName storeLogo country city status rating businessSector", // Add more fields as needed
+        },
+      })
+      .sort(sortObject)
+      .skip((Number(page) - 1) * Number(limit))
+      .limit(Number(limit));
+
+    products = products.map((product) => {
+      const productId = product._id.toString();
+      const yearlyStats = yearlyProductStats[productId] || {
+        quantity: 0,
+        totalAmount: 0,
+      };
+      const monthlyStats = monthlyProductStats[productId] || {
+        quantity: 0,
+        totalAmount: 0,
+      };
+
+      // Extract store information from populated catalog
+      const storeInfo = product.catalog?.storeId
+        ? {
+            storeId: product.catalog.storeId._id,
+            storeName: product.catalog.storeId.storeName,
+            storeLogo: product.catalog.storeId.storeLogo,
+            country: product.catalog.storeId.country,
+            city: product.catalog.storeId.city,
+            status: product.catalog.storeId.status,
+            rating: product.catalog.storeId.rating,
+            businessSector: product.catalog.storeId.businessSector,
+            // Add more store fields as needed
+          }
+        : null;
+
+      return {
+        ...product.toObject(),
+        store: storeInfo, // Add store information to the product object
+        yearlyOrderedQuantity: yearlyStats.quantity,
+        yearlyOrderTotal: yearlyStats.totalAmount,
+        monthlyOrderedQuantity: monthlyStats.quantity,
+        monthlyOrderTotal: monthlyStats.totalAmount,
+      };
+    });
+
+    // Apply sorting based on period parameter
+    if (period === "year") {
+      products.sort(
+        (a, b) => b.yearlyOrderedQuantity - a.yearlyOrderedQuantity
+      );
+    } else if (period === "month") {
+      products.sort(
+        (a, b) => b.monthlyOrderedQuantity - a.monthlyOrderedQuantity
+      );
+    }
+
     res.json({
       products,
       total,
@@ -274,6 +424,7 @@ const getAllProductsAdmin = async (req, res) => {
     page = 1,
     limit = 10,
     period,
+    orderValue,
   } = req.query;
 
   let queryObject = {};
@@ -312,13 +463,17 @@ const getAllProductsAdmin = async (req, res) => {
     }
   }
 
-  if (req.query.period) {
+  if (orderValue) {
+    queryObject.orderValue = { $gte: Number(orderValue) };
+  }
+
+  if (period) {
     const now = new Date();
     let startDate;
 
-    if (req.query.period === "year") {
+    if (period === "year") {
       startDate = new Date(now.getFullYear(), 0, 1); // Start of the year
-    } else if (req.query.period === "month") {
+    } else if (period === "month") {
       startDate = new Date(now.getFullYear(), now.getMonth(), 1); // Start of the month
     }
 
@@ -391,9 +546,9 @@ const getAllProductsAdmin = async (req, res) => {
           path: "catalog",
           populate: { path: "storeId", model: "Store" },
         })
-        .sort(sortObject)
-        .skip((Number(page) - 1) * Number(limit))
-        .limit(Number(limit)),
+        .sort(sortObject),
+      // .skip((Number(page) - 1) * Number(limit))
+      // .limit(Number(limit)),
     ]);
 
     res.json({
@@ -476,6 +631,9 @@ const updateProduct = async (req, res) => {
       product.subCategory = req.body.subCategory || product.subCategory;
       product.subSubCategory =
         req.body.subSubCategory || product.subSubCategory;
+      product.orderValue =
+        (req.body.orderValue && req.body.orderValue + product.orderValue) ||
+        product.orderValue;
 
       await product.save();
 
@@ -770,4 +928,5 @@ module.exports = {
   deleteManyProducts,
   getShowingStoreProducts,
   getStoreProducts,
+  YearlyProductController,
 };

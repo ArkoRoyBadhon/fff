@@ -16,6 +16,7 @@ const {
   getShowingProductsforCatalog,
   getStoreProducts,
   getAllProductsAdmin,
+  YearlyProductController,
 } = require("../controller/productController");
 const { protect } = require("../middleware/authMiddleware");
 const { isAdmin } = require("../middleware/adminMiddleware");
@@ -41,6 +42,7 @@ router.get("/store-products/:id", getStoreProducts);
 //get all products
 router.get("/", getAllProducts);
 router.get("/admin", getAllProductsAdmin);
+router.get("/time-product", YearlyProductController);
 
 //get a product by slug
 router.get("/product-by-slug/:slug", getProductBySlug);

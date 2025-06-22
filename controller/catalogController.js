@@ -267,6 +267,26 @@ exports.getCatalogs = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+exports.getCatalogsAdmin = async (req, res) => {
+  try {
+    const sellerId = req.params.sellerId;
+    const catalogs = await Catalog.find({ sellerId })
+      .populate("storeId", "storeName")
+      .populate("categories")
+      .populate("subCategories")
+      .populate("subSubCategories")
+      .sort({ createdAt: -1 });
+
+    if (!catalogs || catalogs.length === 0) {
+      return res.status(404).json({ message: "No catalogs found" });
+    }
+
+    res.status(200).json({ catalogs });
+  } catch (error) {
+    console.error("Error fetching catalogs:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
 
 // Get all catalogs (for admin)
 exports.getAllCatalogs = async (req, res) => {

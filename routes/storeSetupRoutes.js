@@ -12,7 +12,10 @@ const {
   updateStore,
   getAllStoresForUser,
   getTopVerifiedExporters,
-  getStoreById, 
+  getStoreById,
+  getTopVerifiedExportersAdmin,
+  topStoresByTimeController,
+  getStoreStatusAdmin,
 } = require("../controller/storeSetupController");
 const multer = require("multer");
 const path = require("path");
@@ -116,12 +119,22 @@ router.put(
 );
 
 router.get("/status", protect, authorize("seller", "admin"), getStoreStatus);
+router.get(
+  "/status-by-admin/:sellerId",
+  isAdmin,
+  // authorize("seller", "admin"),
+  getStoreStatusAdmin
+);
+
 router.get("/details", protect, authorize("seller", "admin"), getStoreDetails);
 router.get("/all", isAdmin, getAllStores);
 router.get("/all-for-user", getAllStoresForUser);
 router.get("/preview/:filename", getFilePreview);
 router.put("/status", isAdmin, updateStoreStatus);
 router.get("/top-verified-exporters", getTopVerifiedExporters);
+//new
+router.get("/top-time-exporters", topStoresByTimeController);
+router.get("/getTopVerifiedExportersAdmin", getTopVerifiedExportersAdmin);
 router.get("/:id", getStoreById);
 
 module.exports = router;

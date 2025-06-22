@@ -1,6 +1,7 @@
 const mongoose = require("mongoose");
 const RFQ = require("../models/RFQ");
 const Quotation = require("../models/Quotation");
+const createNotificationFunc = require("../utils/createNotification");
 
 const createRFQ = async (req, res) => {
   try {
@@ -45,7 +46,7 @@ const getAllRFQs = async (req, res) => {
   try {
     const { status, search, page = 1, limit = 10 } = req.query;
 
-    const query = {};
+    const query = { status: { $nin: ["Draft"] } };
 
     if (status) {
       query.status = status;
@@ -66,9 +67,9 @@ const getAllRFQs = async (req, res) => {
       populate: { path: "buyer", select: "name email company" },
     };
 
-    const rfqs = await RFQ.find({ status: { $nin: ["Draft"] } })
+    const rfqs = await RFQ.find(query)
       .sort({ createdAt: -1 })
-      .populate("buyer", "firstName lastName email company");
+      .populate("buyer", "firstName lastName email companyName");
 
     res.json(rfqs);
   } catch (error) {
@@ -161,6 +162,39 @@ const getRFQById = async (req, res) => {
   }
 };
 
+const getRFQByIdAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid RFQ ID" });
+    }
+
+    // Get RFQ
+    const rfq = await RFQ.findById(id).populate("buyer", "name email company");
+
+    if (!rfq) {
+      return res.status(404).json({ message: "RFQ not found" });
+    }
+
+    // Get all quotations for this RFQ
+    const quotations = await Quotation.find({ rfq: id })
+      .populate("supplier", "name email company")
+      .select("price unitPrice deliveryTime status supplier");
+
+    // Combine the data
+    const response = {
+      ...rfq.toObject(),
+      quotations,
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error("Error fetching RFQ by ID:", error);
+    res.status(500).json({ message: "Server error while fetching RFQ" });
+  }
+};
+
 const updateRFQ = async (req, res) => {
   try {
     const { id } = req.params;
@@ -217,6 +251,65 @@ const updateRFQ = async (req, res) => {
   }
 };
 
+const updateRFQAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      productName,
+      address,
+      sourcingQuantity,
+      detailedRequirements,
+      status,
+      imageUrl,
+    } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: "Invalid RFQ ID" });
+    }
+
+    const rfq = await RFQ.findById(id);
+    if (!rfq) {
+      return res.status(404).json({ message: "RFQ not found" });
+    }
+
+    rfq.productName = productName || rfq.productName;
+    rfq.address = address || rfq.address;
+    rfq.sourcingQuantity = sourcingQuantity || rfq.sourcingQuantity;
+    rfq.detailedRequirements = detailedRequirements || rfq.detailedRequirements;
+    rfq.status = status || rfq.status;
+    rfq.imageUrl = imageUrl !== undefined ? imageUrl : rfq.imageUrl;
+
+    const updatedRFQ = await rfq.save();
+
+    if (status === "Closed") {
+      await createNotificationFunc(
+        rfq.buyer,
+        "buyer",
+        "info",
+        "buyingLeads",
+        `Your Buying Leads ${rfq.productName} has been rejected.`,
+        "/",
+        { rfq }
+      );
+    } else if (status === "Published") {
+      await createNotificationFunc(
+        rfq.buyer,
+        "buyer",
+        "info",
+        "buyingLeads",
+        `Your Buying Leads ${rfq.productName} has been Activated/published.`,
+        "/",
+        { rfq }
+      );
+    }
+
+    res.json(updatedRFQ);
+  } catch (error) {
+    console.error("Error updating RFQ:", error);
+    res.status(500).json({ message: "Server error while updating RFQ" });
+  }
+};
+
 const deleteRFQ = async (req, res) => {
   try {
     const { id } = req.params;
@@ -230,11 +323,11 @@ const deleteRFQ = async (req, res) => {
       return res.status(404).json({ message: "RFQ not found" });
     }
 
-    if (rfq.buyer.toString() !== req.user.id && req.user.role !== "admin") {
-      return res
-        .status(403)
-        .json({ message: "Not authorized to delete this RFQ" });
-    }
+    // if (rfq.buyer.toString() !== req.user.id && req.user.role !== "admin") {
+    //   return res
+    //     .status(403)
+    //     .json({ message: "Not authorized to delete this RFQ" });
+    // }
 
     const quotationsCount = await Quotation.countDocuments({ rfq: id });
     if (quotationsCount > 0) {
@@ -258,6 +351,8 @@ module.exports = {
   getAllRFQsByUser,
   getAllRFQsBySellerQuotation,
   getRFQById,
+  getRFQByIdAdmin,
   updateRFQ,
+  updateRFQAdmin,
   deleteRFQ,
 };

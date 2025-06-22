@@ -212,7 +212,7 @@ const getAdminStats = async (req, res) => {
       {
         $group: {
           _id: null,
-          total: { $sum: "$commission" },
+          total: { $sum: "$commision" },
         },
       },
     ]);
@@ -299,7 +299,7 @@ const getAdminRevenueStats = async (req, res) => {
         {
           $group: {
             _id: null,
-            total: { $sum: "$commission" },
+            total: { $sum: "$commision" },
           },
         },
       ]);
@@ -409,7 +409,7 @@ const getAdminRevenueTrends = async (req, res) => {
             },
           },
         },
-        { $group: { _id: null, total: { $sum: "$commission" } } },
+        { $group: { _id: null, total: { $sum: "$commision" } } },
       ]);
       const b2b = transactionRevenue[0]?.total || 0;
 
@@ -473,7 +473,7 @@ const getAdminRevenueTrends = async (req, res) => {
             },
           },
         },
-        { $group: { _id: null, total: { $sum: "$commission" } } },
+        { $group: { _id: null, total: { $sum: "$commision" } } },
       ]);
       const b2b = transactionRevenue[0]?.total || 0;
 
@@ -537,7 +537,7 @@ const getAdminRevenueTrends = async (req, res) => {
             },
           },
         },
-        { $group: { _id: null, total: { $sum: "$commission" } } },
+        { $group: { _id: null, total: { $sum: "$commision" } } },
       ]);
       const b2b = transactionRevenue[0]?.total || 0;
 
@@ -604,7 +604,7 @@ const getWeeklyRevenue = async (req, res) => {
       {
         $group: {
           _id: { $dayOfWeek: "$createdAt" },
-          total: { $sum: "$commission" },
+          total: { $sum: "$commision" },
         },
       },
     ]);

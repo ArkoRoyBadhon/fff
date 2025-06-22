@@ -119,7 +119,7 @@ const productSchema = new mongoose.Schema(
     status: {
       type: String,
       default: "show",
-      enum: ["show", "draft"],
+      enum: ["show", "disable"],
     },
     price: {
       type: Number,
@@ -163,6 +163,10 @@ const productSchema = new mongoose.Schema(
       count: { type: Number, default: 0 },
     },
     sold: {
+      type: Number,
+      default: 0,
+    },
+    orderValue: {
       type: Number,
       default: 0,
     },

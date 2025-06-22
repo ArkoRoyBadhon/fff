@@ -4,7 +4,7 @@ const notificationSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",
-    required: true,
+    // required: true,
   },
   role: {
     type: String,
@@ -18,7 +18,15 @@ const notificationSchema = new mongoose.Schema({
   },
   module: {
     type: String,
-    enum: ["store", "catalog", "subscription", "account", "other"],
+    enum: [
+      "store",
+      "catalog",
+      "subscription",
+      "account",
+      "advertisement",
+      "buyingLeads",
+      "other",
+    ],
     required: true,
   },
   message: {

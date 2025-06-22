@@ -232,6 +232,23 @@ const getSellerInquiries = async (req, res) => {
       .json({ message: "Error fetching inquiries", error: error.message });
   }
 };
+const getAdminInquiries = async (req, res) => {
+  try {
+    const inquiries = await Inquiry.find()
+      .populate("buyerId")
+      .populate("sellerId")
+      .populate("productId")
+      .populate("rfqId")
+      .populate("quoteId")
+      .sort({ updatedAt: -1 });
+
+    res.json(inquiries);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error fetching inquiries", error: error.message });
+  }
+};
 
 const getInquiry = async (req, res) => {
   try {
@@ -287,6 +304,36 @@ const getInquiry = async (req, res) => {
     });
 
     res.json({ inquiry: updatedInquiry, order: existsOrder });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Error fetching inquiry", error: error.message });
+  }
+};
+const getAdminInquiry = async (req, res) => {
+  try {
+    const { inquiryId } = req.params;
+
+    // Fetch the inquiry
+    const inquiry = await Inquiry.findById(inquiryId)
+      .populate("buyerId")
+      .populate("productId")
+      .populate("sellerId")
+      .populate("rfqId")
+      .populate("quoteId");
+
+    if (!inquiry) {
+      return res.status(404).json({ message: "Inquiry not found" });
+    }
+
+    const existsOrder = await Order.findOne({
+      inquiry: inquiryId,
+      status: {
+        $in: ["Pending", "Processing", "Delivered", "Shipped", "Not_Confirm"],
+      },
+    });
+
+    res.json({ inquiry: inquiry, order: existsOrder });
   } catch (error) {
     res
       .status(500)
@@ -386,7 +433,9 @@ module.exports = {
   addMessage,
   getBuyerInquiries,
   getSellerInquiries,
+  getAdminInquiries,
   getInquiry,
   closeInquiry,
   getChatBySeller,
+  getAdminInquiry,
 };

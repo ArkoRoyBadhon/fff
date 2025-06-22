@@ -6,6 +6,9 @@ const mongoose = require("mongoose");
 const Admin = require("../models/Admin");
 const Product = require("../models/Product");
 const User = require("../models/User");
+const StoreSetup = require("../models/StoreSetup");
+const Catalog = require("../models/Catalog");
+const Order = require("../models/Order");
 
 // Helper function to create a notification
 const createNotification = async (
@@ -144,6 +147,25 @@ exports.createStore = async (req, res) => {
 exports.getStoreStatus = async (req, res) => {
   try {
     const store = await Store.findOne({ sellerId: req.user._id }).select(
+      "status rejectionReasons"
+    );
+    if (!store) {
+      return res.status(404).json({ message: "No store setup found" });
+    }
+    res.status(200).json({
+      status: store.status,
+      rejectionReasons: store.rejectionReasons || [],
+    });
+  } catch (error) {
+    console.error("Error fetching store status:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.getStoreStatusAdmin = async (req, res) => {
+  try {
+    const sellerId = req.params.sellerId;
+    const store = await Store.findOne({ sellerId: sellerId }).select(
       "status rejectionReasons"
     );
     if (!store) {
@@ -533,6 +555,139 @@ exports.getTopVerifiedExporters = async (req, res) => {
   }
 };
 
+// exports.getTopVerifiedExportersAdmin = async (req, res) => {
+//   try {
+//     const premiumStores = await Store.find({
+//       status: "approved",
+//     })
+//       .populate({
+//         path: "sellerId",
+//         match: {
+//           isActive: true,
+//         },
+//         select: "membership isActive",
+//       })
+//       .limit(6)
+//       .sort({ createdAt: -1 })
+//       .lean();
+
+//     res.status(200).json({
+//       success: true,
+//       stores: premiumStores,
+//     });
+//   } catch (error) {
+//     console.error("Error fetching top verified exporters:", error);
+//     res.status(500).json({ message: "Server error" });
+//   }
+// };
+
+exports.getTopVerifiedExportersAdmin = async (req, res) => {
+  const { page = 1, limit = 10 } = req.query;
+
+  try {
+    // Fetch all orders (excluding cancelled/returned)
+    const allOrders = await Order.find({
+      status: { $nin: ["Cancelled", "Return"] },
+    }).populate({
+      path: "product",
+      select: "catalog",
+      populate: {
+        path: "catalog",
+        select: "storeId",
+      },
+    });
+
+    const calculateStoreStats = (orders) => {
+      const stats = {
+        counts: {},
+        totals: {},
+        products: {},
+      };
+
+      orders.forEach((order) => {
+        if (order.product?.catalog?.storeId) {
+          const storeId = order.product.catalog.storeId.toString();
+          stats.counts[storeId] = (stats.counts[storeId] || 0) + 1;
+          stats.totals[storeId] =
+            (stats.totals[storeId] || 0) + (order.total || 0);
+          stats.products[storeId] =
+            (stats.products[storeId] || 0) + (order.quantity || 1);
+        }
+      });
+
+      return stats;
+    };
+
+    // Calculate overall statistics
+    const overallStats = calculateStoreStats(allOrders);
+
+    // Get stores with pagination
+    const allStores = await Store.find({})
+      .skip((Number(page) - 1) * Number(limit))
+      .limit(Number(limit));
+
+    // Get detailed statistics for each store
+    const storesWithStats = await Promise.all(
+      allStores.map(async (store) => {
+        const catalogs = await Catalog.find({ storeId: store._id }).select(
+          "_id"
+        );
+        const catalogIds = catalogs.map((c) => c._id);
+
+        // Get product count for this store
+        const productCount = await Product.countDocuments({
+          catalog: { $in: catalogIds },
+        });
+
+        // Get review statistics
+        const reviewStats = await Product.aggregate([
+          {
+            $match: {
+              catalog: { $in: catalogIds },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              totalReviews: { $sum: "$rating.count" },
+              avgRating: { $avg: "$rating.average" },
+            },
+          },
+        ]);
+
+        const storeId = store._id.toString();
+        return {
+          ...store.toObject(),
+          orderCount: overallStats.counts[storeId] || 0,
+          orderTotal: overallStats.totals[storeId] || 0,
+          productsSold: overallStats.products[storeId] || 0,
+          totalProducts: productCount, // Added total products count
+          reviewStats: {
+            totalReviews: reviewStats[0]?.totalReviews || 0,
+            avgRating: reviewStats[0]?.avgRating || 0,
+          },
+        };
+      })
+    );
+
+    // Sort by order count (descending)
+    storesWithStats.sort((a, b) => b.orderCount - a.orderCount);
+
+    const total = await Store.countDocuments({});
+
+    res.json({
+      stores: storesWithStats,
+      total,
+      limits: Number(limit),
+      pages: Number(page),
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: err.message,
+      error: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    });
+  }
+};
 // Get store by ID (public)
 exports.getStoreById = async (req, res) => {
   try {
@@ -556,5 +711,126 @@ exports.getStoreById = async (req, res) => {
   } catch (error) {
     console.error("Error fetching store by ID:", error);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+exports.topStoresByTimeController = async (req, res) => {
+  const { page = 1, limit = 10, period } = req.query;
+
+  try {
+    const now = new Date();
+
+    const yearlyStartDate = new Date(now.getFullYear(), 0, 1);
+    const yearlyOrderFilter = {
+      createdAt: { $gte: yearlyStartDate },
+      status: { $nin: ["Cancelled", "Return"] },
+    };
+
+    const monthlyStartDate = new Date();
+    monthlyStartDate.setDate(monthlyStartDate.getDate() - 29);
+    const monthlyOrderFilter = {
+      createdAt: { $gte: monthlyStartDate },
+      status: { $nin: ["Cancelled", "Return"] },
+    };
+
+    // Fetch all orders needed for calculations
+    const [yearlyOrders, monthlyOrders, allOrders] = await Promise.all([
+      Order.find(yearlyOrderFilter).populate({
+        path: "product",
+        select: "catalog",
+        populate: {
+          path: "catalog",
+          select: "storeId",
+        },
+      }),
+      Order.find(monthlyOrderFilter).populate({
+        path: "product",
+        select: "catalog",
+        populate: {
+          path: "catalog",
+          select: "storeId",
+        },
+      }),
+      Order.find({ status: { $nin: ["Cancelled", "Return"] } }).populate({
+        path: "product",
+        select: "catalog",
+        populate: {
+          path: "catalog",
+          select: "storeId",
+        },
+      }),
+    ]);
+
+    const calculateStoreStats = (orders) => {
+      const orderCounts = {};
+      const orderTotals = {};
+
+      orders.forEach((order) => {
+        if (order.product?.catalog?.storeId) {
+          const storeId = order.product.catalog.storeId.toString();
+          orderCounts[storeId] = (orderCounts[storeId] || 0) + 1;
+          orderTotals[storeId] =
+            (orderTotals[storeId] || 0) + (order.total || 0);
+        }
+      });
+
+      return { counts: orderCounts, totals: orderTotals };
+    };
+
+    // Calculate product counts (overall, not time-based)
+    const calculateProductCounts = (orders) => {
+      const productCounts = {};
+
+      orders.forEach((order) => {
+        if (order.product?.catalog?.storeId) {
+          const storeId = order.product.catalog.storeId.toString();
+          productCounts[storeId] =
+            (productCounts[storeId] || 0) + (order.quantity || 1);
+        }
+      });
+
+      return productCounts;
+    };
+
+    const yearlyStats = calculateStoreStats(yearlyOrders);
+    const monthlyStats = calculateStoreStats(monthlyOrders);
+    const overallProductCounts = calculateProductCounts(allOrders);
+
+    const allStores = await Store.find({})
+      .skip((Number(page) - 1) * Number(limit))
+      .limit(Number(limit));
+
+    let stores = allStores.map((store) => {
+      const storeId = store._id.toString();
+      return {
+        ...store.toObject(),
+        yearlyOrderCount: yearlyStats.counts[storeId] || 0,
+        yearlyOrderTotal: yearlyStats.totals[storeId] || 0,
+        monthlyOrderCount: monthlyStats.counts[storeId] || 0,
+        monthlyOrderTotal: monthlyStats.totals[storeId] || 0,
+        totalProductsSold: overallProductCounts[storeId] || 0, // Overall product count
+      };
+    });
+
+    // Sorting logic remains the same
+    if (period === "year") {
+      stores.sort((a, b) => b.yearlyOrderCount - a.yearlyOrderCount);
+    } else if (period === "month") {
+      stores.sort((a, b) => b.monthlyOrderCount - a.monthlyOrderCount);
+    }
+
+    const total = await Store.countDocuments({});
+
+    res.json({
+      stores,
+      total,
+      limits: Number(limit),
+      pages: Number(page),
+    });
+  } catch (err) {
+    res.status(500).json({
+      message: err.message,
+      error: process.env.NODE_ENV === "development" ? err.stack : undefined,
+    });
   }
 };

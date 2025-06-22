@@ -7,10 +7,12 @@ const {
   getAllQuotationsByRFQ,
 } = require("../controller/QuotationController");
 const { protect, authorize } = require("../middleware/authMiddleware");
+const { isAdmin } = require("../middleware/adminMiddleware");
 
 router.post("/", protect, authorize("seller"), createQuotation);
 
 router.get("/rfq/:rfqId", protect, getAllQuotationsByRFQ);
+router.get("/rfq-admin/:rfqId", isAdmin, getAllQuotationsByRFQ);
 
 router.put("/:id", protect, updateQuotation);
 

@@ -11,6 +11,7 @@ const {
   updateCatalogStatus,
   deleteCatalog,
   getFilePreview,
+  getCatalogsAdmin,
 } = require("../controller/catalogController");
 const multer = require("multer");
 const path = require("path");
@@ -35,16 +36,16 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const filetypes = /jpeg|jpg|png/;
-    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+    const extname = filetypes.test(
+      path.extname(file.originalname).toLowerCase()
+    );
     const mimetype = filetypes.test(file.mimetype);
     if (extname && mimetype) {
       return cb(null, true);
     }
     cb(new Error("Error: Only images (JPEG, JPG, PNG) are allowed!"));
   },
-}).fields([
-  { name: "image", maxCount: 1 },
-]);
+}).fields([{ name: "image", maxCount: 1 }]);
 
 router.post(
   "/create",
@@ -88,9 +89,15 @@ router.put(
 
 router.get("/status", protect, authorize("seller"), getCatalogStatus);
 router.get("/catalogs", protect, authorize("seller"), getCatalogs);
+router.get("/catalogs/:sellerId", isAdmin, getCatalogsAdmin);
 router.get("/all", isAdmin, getAllCatalogs);
 router.put("/status", isAdmin, updateCatalogStatus);
-router.delete("/delete/:catalogId", protect, authorize("seller"), deleteCatalog);
+router.delete(
+  "/delete/:catalogId",
+  protect,
+  authorize("seller"),
+  deleteCatalog
+);
 router.get("/preview/:filename", getFilePreview);
 
 module.exports = router;

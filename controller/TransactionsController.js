@@ -12,6 +12,7 @@ const createTransaction = async (req, res) => {
       amount,
       description,
       reference,
+      commision,
     } = req.body;
 
     if (!user || !paymentMethod || !amount) {
@@ -28,7 +29,7 @@ const createTransaction = async (req, res) => {
       amount,
       description,
       reference,
-      commission: amount * 0.01,
+      commision: commision,
     });
 
     res.status(201).json(transaction);

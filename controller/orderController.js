@@ -171,10 +171,20 @@ const updateOrder = async (req, res) => {
       });
     }
 
-    if (req.body.sold) {
+    if (req.body.sold || req.body.orderValue) {
+      const updateFields = {};
+
+      if (req.body.sold) {
+        updateFields.sold = req.body.sold;
+      }
+
+      if (req.body.orderValue) {
+        updateFields.orderValue = req.body.orderValue;
+      }
+
       await Product.findByIdAndUpdate(
         req.body.product,
-        { $inc: { sold: req.body.sold } },
+        { $inc: updateFields },
         { new: true }
       );
     }
