@@ -32,6 +32,7 @@ app.use(
         "http://localhost:3000",
         "http://localhost:5000",
         "https://accounts.google.com",
+        "https://king-mansa-client.vercel.app",
       ];
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
