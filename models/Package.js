@@ -1,58 +1,79 @@
 const mongoose = require("mongoose");
 
 const packageSchema = new mongoose.Schema({
-  name: { 
-    type: String, 
-    required: true, 
-    unique: true,
-    trim: true
-  },
-  price: { 
-    type: Number, 
+  name: {
+    type: String,
     required: true,
-    min: 0
+    unique: true,
+    trim: true,
   },
-  currency: { 
-    type: String, 
-    default: "usd" 
+  price: {
+    type: Number,
+    required: true,
+    min: 0,
+  },
+  currency: {
+    type: String,
+    default: "usd",
   },
   conditions: {
-    maxCatalogs: { 
-      type: Number, 
+    maxCatalogs: {
+      type: Number,
       default: 0,
-      min: 0
+      min: 0,
     },
-    maxProductsPerCatalog: { 
-      type: Number, 
+    maxProductsPerCatalog: {
+      type: Number,
       default: 0,
-      min: 0
+      min: 0,
     },
   },
-  features: [{
-    type: String,
-    trim: true
-  }],
-  discount: { 
-    type: Number, 
+  features: [
+    {
+      type: String,
+      trim: true,
+    },
+  ],
+  discount: {
+    type: Number,
     default: 0,
     min: 0,
-    max: 100
+    max: 100,
   },
   description: {
     type: String,
-    trim: true
+    trim: true,
   },
-  isActive: { 
-    type: Boolean, 
-    default: true 
+  duration: {
+    value: {
+      type: Number,
+      min: 1,
+      default: 1,
+      
+    },
+    unit: {
+      type: String,
+      enum: ["minutes", "months", "years"],
+      required: true,
+      default: "minutes",
+    },
   },
-  createdAt: { 
-    type: Date, 
-    default: Date.now 
+  type: {
+    type: String,
+    enum: ["free", "paid"],
+    default: "paid",
   },
-  updatedAt: { 
-    type: Date, 
-    default: Date.now 
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now,
   },
 });
 

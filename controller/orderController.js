@@ -201,7 +201,7 @@ const updateOrder = async (req, res) => {
 };
 const updateOrderAdmin = async (req, res) => {
   const newStatus = req.body.status;
-  console.log("data", req.body);
+  // console.log("data", req.body);
 
   try {
     if (!newStatus) {

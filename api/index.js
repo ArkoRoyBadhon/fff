@@ -90,6 +90,10 @@ app.use("/api/analytics", require("../routes/analyticsRoute"));
 app.use("/api/user-activity", require("../routes/userActivityRoute"));
 app.use("/api/inquiryList", require("../routes/inquiryListRoute"));
 app.use("/api/landingpage", require("../routes/landingpageRoutes"));
+app.use("/api/settings", require("../routes/settingRoutes"));
+
+app.use("/api/roles", require("../routes/roleRoutes"));
+app.use("/api/employees", require("../routes/employeeRoutes"));
 
 // Start the server
 const PORT = process.env.PORT || 5000;

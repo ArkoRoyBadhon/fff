@@ -86,6 +86,7 @@ const getShowingProductsforCatalog = async (req, res) => {
     });
   }
 };
+
 const getShowingProducts = async (req, res) => {
   try {
     const { page = 1, limit = 12, catalogId } = req.query;
@@ -135,7 +136,6 @@ const getAllProducts = async (req, res) => {
     limit = 10,
     searchTerm,
     categoryType,
-
     period,
   } = req.query;
 
@@ -177,10 +177,6 @@ const getAllProducts = async (req, res) => {
   } else if (price === "date-updated-desc") {
     sortObject.updatedAt = -1;
   }
-
-  // if (category) {
-  //   queryObject.category = new mongoose.Types.ObjectId(category);
-  // }
 
   if (category) {
     if (Number(categoryType) === 1) {
@@ -231,6 +227,13 @@ const getAllProducts = async (req, res) => {
       });
     }
 
+    // Find non-archived catalog IDs
+    const nonArchivedCatalogs = await Catalog.find({ isArchived: false }).select("_id");
+    const nonArchivedCatalogIds = nonArchivedCatalogs.map((catalog) => catalog._id);
+
+    // Add catalog filter to queryObject to only include products from non-archived catalogs
+    queryObject.catalog = { $in: nonArchivedCatalogIds };
+
     const total = await Product.countDocuments(queryObject);
 
     // Get paginated products
@@ -265,8 +268,6 @@ const getAllProducts = async (req, res) => {
     }
 
     const orderData = await Order.find(queryObjectOrder);
-
-    console.log("order data ===", orderData);
 
     res.json({
       products,
@@ -897,14 +898,77 @@ const deleteManyProducts = async (req, res) => {
   }
 };
 
+// const getStoreProducts = async (req, res) => {
+//   try {
+//     console.log("get store products", req.params.id);
+
+//     const sellerStore = await StoreSetup.findOne({ sellerId: req.params.id });
+
+//     const sellerCatalogs = await Catalog.find({ storeId: sellerStore._id });
+
+//     const products = await Product.find({ seller: req.params.id }).populate({
+//       path: "category",
+//     });
+//     res.send(products);
+//   } catch (err) {
+//     res.status(500).send({
+//       message: err.message,
+//     });
+//   }
+// };
+// const getStoreProducts = async (req, res) => {
+//   try {
+//     console.log("get store products", req.params.id);
+
+//     const products = await Product.find({ seller: req.params.id }).populate({
+//       path: "category",
+//     });
+//     res.send(products);
+//   } catch (err) {
+//     res.status(500).send({
+//       message: err.message,
+//     });
+//   }
+// };
+
 const getStoreProducts = async (req, res) => {
   try {
     console.log("get store products", req.params.id);
 
-    const products = await Product.find({ seller: req.params.id }).populate({
-      path: "category",
+    const sellerStore = await StoreSetup.findOne({ sellerId: req.params.id });
+
+    if (!sellerStore) {
+      return res.status(404).send({ message: "Store not found" });
+    }
+
+    // Add isArchived: false to the query
+    const sellerCatalogs = await Catalog.find({ 
+      storeId: sellerStore._id, 
+      isArchived: false 
     });
-    res.send(products);
+
+    const catalogsWithProducts = await Promise.all(
+      sellerCatalogs.map(async (catalog) => {
+        const products = await Product.find({
+          seller: req.params.id,
+          catalog: catalog._id,
+        }).populate("category");
+
+        return {
+          ...catalog.toObject(),
+          products,
+        };
+      })
+    );
+
+    const response = {
+      store: {
+        ...sellerStore.toObject(),
+        catalogs: catalogsWithProducts,
+      },
+    };
+
+    res.send(response);
   } catch (err) {
     res.status(500).send({
       message: err.message,

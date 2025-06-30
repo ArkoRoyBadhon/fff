@@ -1,11 +1,14 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
+const { UserDefinedMessageInstance } = require("twilio/lib/rest/api/v2010/account/call/userDefinedMessage");
 
 const adminSchema = new mongoose.Schema({
   name: {
     en: { type: String, required: true },
   },
   image: { type: String },
+  username: { type: String, required: true, unique: true },
+  isActive: { type: Boolean, default: true },
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true, select: false },
   phone: { type: String },

@@ -1,48 +1,39 @@
-const router = require("express").Router();
-
+const express = require("express");
+const router = express.Router();
 const {
-  addGlobalSetting,
-  getGlobalSetting,
-  updateGlobalSetting,
-  addStoreSetting,
-  getStoreSetting,
-  updateStoreSetting,
-  getStoreSeoSetting,
-  addStoreCustomizationSetting,
-  getStoreCustomizationSetting,
-  updateStoreCustomizationSetting,
+  getAllSettings,
+  getGeneralSettings,
+  updateGeneralSettings,
+  getSocialMediaSettings,
+  updateSocialMediaSettings,
+  getSEOSettings,
+  updateSEOSettings,
+  getSocialLoginSettings,
+  updateSocialLoginSettings,
 } = require("../controller/settingController");
+const { isAdmin } = require("../middleware/adminMiddleware");
 
-//add a global setting
-router.post("/global/add", addGlobalSetting);
+// Get all settings (admin only)
+router.get("/", isAdmin, getAllSettings);
 
-//get global setting
-router.get("/global/all", getGlobalSetting);
+// General Settings Routes
+router.get("/general", getGeneralSettings);
 
-//update global setting
-router.put("/global/update", updateGlobalSetting);
+router.put("/general", isAdmin, updateGeneralSettings);
 
-//add a store setting
-router.post("/store-setting/add", addStoreSetting);
+// Social Media Settings Routes
+router.get("/social-media", getSocialMediaSettings);
 
-//get store setting
-router.get("/store-setting/all", getStoreSetting);
+router.put("/social-media", isAdmin, updateSocialMediaSettings);
 
-//get store setting
-router.get("/store-setting/seo", getStoreSeoSetting);
+// SEO Settings Routes
+router.get("/seo", isAdmin, getSEOSettings);
 
-//update store setting
-router.put("/store-setting/update", updateStoreSetting);
+router.put("/seo", isAdmin, updateSEOSettings);
 
-//store customization routes
+// Social Login Settings Routes
+router.get("/social-login", isAdmin, getSocialLoginSettings);
 
-//add a online store customization setting
-router.post("/store/customization/add", addStoreCustomizationSetting);
-
-//get online store customization setting
-router.get("/store/customization/all", getStoreCustomizationSetting);
-
-//update online store customization setting
-router.put("/store/customization/update", updateStoreCustomizationSetting);
+router.put("/social-login", isAdmin, updateSocialLoginSettings);
 
 module.exports = router;

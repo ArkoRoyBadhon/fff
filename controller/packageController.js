@@ -13,7 +13,7 @@ const getPackages = asyncHandler(async (req, res) => {
 
 // Create package
 const createPackage = asyncHandler(async (req, res) => {
-  const { name, price, features, conditions, discount } = req.body;
+  const { name, price, features, conditions, discount, duration } = req.body;
   if (!name || price == null || !Array.isArray(features) || !conditions) {
     res.status(400);
     throw new Error("Missing required fields");
@@ -26,27 +26,37 @@ const createPackage = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error("Invalid conditions");
   }
+  if (!duration || !duration.value || !duration.unit) {
+    res.status(400);
+    throw new Error("Duration is required");
+  }
   const existingPackage = await Package.findOne({ name });
   if (existingPackage) {
     res.status(400);
     throw new Error("Invalid name: Package name must be unique");
   }
+
   const newPackage = new Package({
     name,
     price,
     features,
     conditions,
     discount,
+    duration,
   });
   await newPackage.save();
-  res
-    .status(201)
-    .json({ message: "Package created", package: newPackage, created: true });
+  res.status(201).json({
+    message: "Package created",
+    package: newPackage,
+    created: true,
+  });
 });
 
 // Update package
 const updatePackage = asyncHandler(async (req, res) => {
-  const { id, name, price, features, conditions, discount } = req.body;
+  const { id, name, price, features, conditions, discount, type, duration } =
+    req.body;
+
   if (
     !id ||
     !name ||
@@ -64,18 +74,42 @@ const updatePackage = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("Package not found");
   }
+  if (!duration || !duration.value || !duration.unit) {
+    res.status(400);
+    throw new Error("Duration is required");
+  }
   const existingPackage = await Package.findOne({ name, _id: { $ne: id } });
   if (existingPackage) {
     res.status(400);
     throw new Error("Invalid name: Package name must be unique");
   }
+
+  const isFreePackage = package.type === "free";
+
   package.name = name;
   package.price = price;
   package.features = features;
   package.conditions = conditions;
   package.discount = discount;
+  package.type = type;
   package.updatedAt = Date.now();
+  package.duration = duration; 
+  package.updatedAt = Date.now();
+
   await package.save();
+
+  if (isFreePackage && type === "free") {
+    await User.updateMany(
+      { role: "seller" },
+      {
+        $set: {
+          "packageConditions.basic.maxCatalogs": conditions.maxCatalogs,
+          "packageConditions.basic.maxProductsPerCatalog":
+            conditions.maxProductsPerCatalog,
+        },
+      }
+    );
+  }
   res.json({ message: "Package updated", package });
 });
 
@@ -87,7 +121,7 @@ const deletePackage = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error("Package not found");
   }
-  package.isActive = false; 
+  package.isActive = false;
   await package.save();
   res.json({ message: "Package deleted" });
 });

@@ -8,6 +8,7 @@ const {
   getOrderAdmin,
   BuyerDashboardStats,
   getOrderSeller,
+  getOrderSellerAdmin,
 } = require("../controller/customerOrderController");
 
 const { emailVerificationLimit } = require("../lib/email-sender/sender");
@@ -18,6 +19,8 @@ const { isAdmin } = require("../middleware/adminMiddleware");
 router.post("/add", protect, addOrder);
 router.get("/dashboard-stats", protect, BuyerDashboardStats);
 router.get("/get-order-seller", protect, getOrderSeller);
+
+router.get("/get-order-seller-admin", isAdmin, getOrderSellerAdmin);
 
 // order admin
 router.get("/admin-order", isAdmin, getOrderAdmin);

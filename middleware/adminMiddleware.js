@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const Admin = require("../models/Admin");
+const Employee = require("../models/Employee");
 
 exports.isAdmin = async (req, res, next) => {
   let token;
@@ -25,7 +26,11 @@ exports.isAdmin = async (req, res, next) => {
       });
     }
 
-    const admin = await Admin.findById(decoded.id).select("-password");
+    let admin;
+
+    admin =
+      (await Admin.findById(decoded.id).select("-password")) ||
+      (await Employee.findById(decoded.id).select("-password"));
     if (!admin) {
       return res.status(401).json({
         success: false,

@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const bcrypt = require("bcryptjs");
+const Package = require("./Package");
 
 const userSchema = new mongoose.Schema(
   {
@@ -37,7 +38,7 @@ const userSchema = new mongoose.Schema(
     },
     phoneNumber: {
       type: String,
-      required: [true, "Phone number is required"],
+      // required: [true, "Phone number is required"],
       trim: true,
     },
     country: {
@@ -47,7 +48,7 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: [true, "Password is required"],
+      // required: [true, "Password is required"],
       minlength: [8, "Password must be at least 8 characters"],
       select: false,
     },
@@ -55,6 +56,7 @@ const userSchema = new mongoose.Schema(
       type: [String],
       enum: ["buyer", "seller"],
       required: [true, "At least one role is required"],
+      default: ["buyer"],
       validate: {
         validator: function (v) {
           return v.length > 0;
@@ -62,13 +64,36 @@ const userSchema = new mongoose.Schema(
         message: "At least one role is required",
       },
     },
-    isActive: {
-      type: Boolean,
-      default: true,
-    },
     subscriptionId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Subscription",
+    },
+    subscriptionStatus: {
+      type: String,
+      enum: ["active", "expired", "none"],
+      default: "none",
+    },
+    packageConditions: {
+      current: {
+        type: {
+          name: String,
+          conditions: Object,
+          isArchived: {
+            type: Boolean,
+            default: true,
+          },
+        },
+        default: null,
+      },
+      basic: {
+        maxCatalogs: { type: Number, default: 1 },
+        maxProductsPerCatalog: { type: Number, default: 10 },
+      },
+    },
+
+    currentPackage: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Package",
     },
     lastLogin: {
       type: Date,
@@ -76,6 +101,12 @@ const userSchema = new mongoose.Schema(
     stripeCustomerId: {
       type: String,
       trim: true,
+    },
+    googleId: {
+      type: String,
+    },
+    faceBookId: {
+      type: String,
     },
     paymentMethods: [
       {
@@ -105,6 +136,34 @@ userSchema.pre("save", async function (next) {
   } catch (err) {
     next(err);
   }
+});
+
+// Pre-save hook for new sellers
+userSchema.pre("save", async function (next) {
+  // Only set basic conditions for new sellers
+  if (this.isNew && this.role.includes("seller")) {
+    try {
+      const freePackage = await Package.findOne({
+        type: "free",
+        isActive: true,
+      });
+
+      if (freePackage) {
+        this.packageConditions = this.packageConditions || {};
+        this.packageConditions.basic = {
+          maxCatalogs: freePackage.conditions.maxCatalogs,
+          maxProductsPerCatalog: freePackage.conditions.maxProductsPerCatalog,
+        };
+        // Don't touch current if it exists
+        if (!this.packageConditions.current) {
+          this.packageConditions.current = null;
+        }
+      }
+    } catch (err) {
+      console.error("Error setting package conditions:", err);
+    }
+  }
+  next();
 });
 
 // Password comparison method

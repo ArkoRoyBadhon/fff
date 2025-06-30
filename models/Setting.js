@@ -1,20 +1,21 @@
 const mongoose = require("mongoose");
 
-const settingSchema = new mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: true,
-    },
-    setting: {},
+const settingSchema = new mongoose.Schema({
+  type: {
+    type: String,
+    required: true,
+    enum: ["general", "social-media", "seo", "social-login"],
   },
-  {
-    timestamps: true,
-  }
-);
+  data: {
+    type: mongoose.Schema.Types.Mixed,
+    required: true,
+  },
+  lastUpdated: {
+    type: Date,
+    default: Date.now,
+  },
+});
 
-// module.exports = settingSchema;
+settingSchema.index({ type: 1 }, { unique: true });
 
-const Setting = mongoose.model("Setting", settingSchema);
-
-module.exports = Setting;
+module.exports = mongoose.model("Setting", settingSchema);

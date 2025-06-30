@@ -291,6 +291,135 @@ const getOrderSeller = async (req, res) => {
     });
   }
 };
+const getOrderSellerAdmin = async (req, res) => {
+  try {
+    const { page, limit, status, sellerId } = req.query;
+    console.log("status", limit);
+
+    const pages = Number(page) || 1;
+    const limits = Number(limit) || 8;
+    const skip = (pages - 1) * limits;
+
+    const baseConditions = {};
+    if (sellerId) {
+      baseConditions.seller = sellerId;
+    }
+
+    if (status && status !== "All") {
+      baseConditions.status = status;
+    }
+
+    const totalDoc = await Order.countDocuments({
+      seller: sellerId,
+    });
+
+    // total padding order count
+    const totalPendingOrder = await Order.aggregate([
+      {
+        $match: {
+          status: {
+            $in: ["Pending", "Processing", "Shipped", "Delivered"],
+          },
+          seller: mongoose.Types.ObjectId(sellerId),
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$total" },
+          count: {
+            $sum: 1,
+          },
+        },
+      },
+    ]);
+
+    // total padding order count
+    const totalProcessingOrder = await Order.aggregate([
+      {
+        $match: {
+          status: { $in: ["Pending", "Processing", "Shipped"] },
+          seller: mongoose.Types.ObjectId(sellerId),
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$total" },
+          count: {
+            $sum: 1,
+          },
+        },
+      },
+    ]);
+
+    const totalCancelledOrder = await Order.aggregate([
+      {
+        $match: {
+          status: { $in: ["Cancelled", "Return"] },
+          seller: mongoose.Types.ObjectId(sellerId),
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$total" },
+          count: {
+            $sum: 1,
+          },
+        },
+      },
+    ]);
+
+    const totalDeliveredOrder = await Order.aggregate([
+      {
+        $match: {
+          status: "Completed",
+          seller: mongoose.Types.ObjectId(sellerId),
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$total" },
+          count: {
+            $sum: 1,
+          },
+        },
+      },
+    ]);
+
+    const findConditions = { ...baseConditions };
+    console.log("findConditions", findConditions);
+
+    const orders = await Order.find({ seller: sellerId })
+      .populate("product")
+      .populate("rfqId")
+      .populate("quoteId")
+      .sort({ _id: -1 })
+      .skip(skip)
+      .limit(limits);
+
+    res.send({
+      orders,
+      limits,
+      pages,
+      ongoing: totalPendingOrder.length === 0 ? 0 : totalPendingOrder[0].count,
+      completed:
+        totalDeliveredOrder.length === 0 ? 0 : totalDeliveredOrder[0].count,
+      cancelled:
+        totalCancelledOrder.length === 0 ? 0 : totalCancelledOrder[0].count,
+      orderValue:
+        totalProcessingOrder.length === 0 ? 0 : totalProcessingOrder[0].total,
+      totalDoc,
+    });
+  } catch (err) {
+    res.status(500).send({
+      message: err.message,
+    });
+  }
+};
+
 const getOrderAdmin = async (req, res) => {
   try {
     const { page, limit, status } = req.query;
@@ -768,6 +897,7 @@ module.exports = {
   getOrderById,
   getOrderCustomer,
   getOrderSeller,
+  getOrderSellerAdmin,
   getOrderAdmin,
   sendEmailInvoiceToCustomer,
   // modification related controller

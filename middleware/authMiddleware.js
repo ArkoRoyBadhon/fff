@@ -18,6 +18,7 @@ exports.protect = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+
     // Check the role in the token and query the appropriate model
     let user;
     if (decoded.role === "admin") {

@@ -9,7 +9,7 @@ const admins = [
     email: "marion@gmail.com",
     password: "12345678",
     phone: "713-675-8813",
-    role: "admin",
+    role: "super admin",
     joiningData: new Date(),
     access_list: [
       "dashboard",

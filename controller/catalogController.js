@@ -2,10 +2,11 @@ const Catalog = require("../models/Catalog");
 const Store = require("../models/StoreSetup");
 const Notification = require("../models/Notification");
 const Admin = require("../models/Admin");
+const User = require("../models/User");
 const path = require("path");
 const fs = require("fs");
 
-// Helper function to create a notification (reusing the existing one)
+// Helper function to create a notification
 const createNotification = async (
   userId,
   role,
@@ -63,6 +64,35 @@ exports.createCatalog = async (req, res) => {
         .json({ message: "Store must be approved before creating a catalog" });
     }
 
+    // Check catalog limits
+    const user = await User.findById(req.user._id);
+    const conditions =
+      user.subscriptionStatus === "active" &&
+      user.packageConditions.current &&
+      !user.packageConditions.current.isArchived
+        ? user.packageConditions.current.conditions
+        : user.packageConditions.basic;
+
+    // Skip limit check if maxCatalogs is 0 (unlimited)
+    if (conditions.maxCatalogs !== 0) {
+      const catalogCount = await Catalog.countDocuments({
+        sellerId: user._id,
+        isArchived: false,
+      });
+
+      if (catalogCount >= conditions.maxCatalogs) {
+        return res.status(403).json({
+          message: `You've reached your catalog limit (${
+            conditions.maxCatalogs
+          }). ${
+            user.subscriptionStatus === "active"
+              ? "Please upgrade your plan for more catalogs."
+              : "Please subscribe to a plan to create more catalogs."
+          }`,
+        });
+      }
+    }
+
     // Parse array fields
     const parsedCategories = JSON.parse(categories);
     const parsedSubCategories = JSON.parse(subCategories);
@@ -77,6 +107,7 @@ exports.createCatalog = async (req, res) => {
       subCategories: parsedSubCategories,
       subSubCategories: parsedSubSubCategories,
       image: `/uploads/${files.image[0].filename}`,
+      isArchived: false,
     });
 
     await catalog.save();
@@ -157,14 +188,11 @@ exports.editCatalog = async (req, res) => {
 
     if (catalog.status === "approved") {
       if (isCatalogNameChanged) {
-        // If catalogName is changed, set status to pending and require admin approval
         newStatus = "pending";
       } else if (areOtherFieldsChanged) {
-        // If only other fields are changed, keep status as approved (no admin approval needed)
         newStatus = "approved";
       }
     } else if (catalog.status === "rejected") {
-      // For rejected catalogs, any update requires admin approval
       newStatus = "pending";
     }
 
@@ -175,13 +203,12 @@ exports.editCatalog = async (req, res) => {
     catalog.subSubCategories = parsedSubSubCategories;
     catalog.status = newStatus;
     if (newStatus === "pending") {
-      catalog.rejectionReasons = []; // Clear rejection reasons when pending
+      catalog.rejectionReasons = [];
     }
     catalog.updatedAt = Date.now();
 
     // Handle image update if a new image is uploaded
     if (files && files.image && files.image[0]) {
-      // Delete the old image if it exists
       if (catalog.image) {
         const oldImagePath = path.join(__dirname, "../public", catalog.image);
         if (fs.existsSync(oldImagePath)) {
@@ -229,7 +256,7 @@ exports.editCatalog = async (req, res) => {
 exports.getCatalogStatus = async (req, res) => {
   try {
     const catalog = await Catalog.find({ sellerId: req.user._id }).select(
-      "status rejectionReasons"
+      "status rejectionReasons catalogName isArchived"
     );
     if (!catalog || catalog.length === 0) {
       return res.status(404).json({ message: "No catalogs found" });
@@ -239,6 +266,7 @@ exports.getCatalogStatus = async (req, res) => {
         status: cat.status,
         rejectionReasons: cat.rejectionReasons || [],
         catalogName: cat.catalogName,
+        isArchived: cat.isArchived,
       })),
     });
   } catch (error) {
@@ -250,15 +278,26 @@ exports.getCatalogStatus = async (req, res) => {
 // Get all catalogs for a seller
 exports.getCatalogs = async (req, res) => {
   try {
-    const catalogs = await Catalog.find({ sellerId: req.user._id })
+    const user = await User.findById(req.user._id);
+    const conditions =
+      user.subscriptionStatus === "active" &&
+      user.packageConditions.current &&
+      !user.packageConditions.current.isArchived
+        ? user.packageConditions.current.conditions
+        : user.packageConditions.basic;
+
+    // If maxCatalogs is 0, no limit is applied
+    const query = { sellerId: req.user._id, isArchived: false };
+    const catalogs = await Catalog.find(query)
       .populate("storeId", "storeName")
       .populate("categories")
       .populate("subCategories")
       .populate("subSubCategories")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .limit(conditions.maxCatalogs !== 0 ? conditions.maxCatalogs : undefined);
 
     if (!catalogs || catalogs.length === 0) {
-      return res.status(404).json({ message: "No catalogs found" });
+      return res.status(404).json({ message: "No active catalogs found" });
     }
 
     res.status(200).json({ catalogs });
@@ -267,6 +306,32 @@ exports.getCatalogs = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+// Get archived catalogs for a seller
+exports.getArchivedCatalogs = async (req, res) => {
+  try {
+    const catalogs = await Catalog.find({
+      sellerId: req.user._id,
+      isArchived: true,
+    })
+      .populate("storeId", "storeName")
+      .populate("categories")
+      .populate("subCategories")
+      .populate("subSubCategories")
+      .sort({ createdAt: -1 });
+
+    if (!catalogs || catalogs.length === 0) {
+      return res.status(404).json({ message: "No archived catalogs found" });
+    }
+
+    res.status(200).json({ catalogs });
+  } catch (error) {
+    console.error("Error fetching archived catalogs:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Get catalogs by seller ID (for admin)
 exports.getCatalogsAdmin = async (req, res) => {
   try {
     const sellerId = req.params.sellerId;
@@ -291,15 +356,21 @@ exports.getCatalogsAdmin = async (req, res) => {
 // Get all catalogs (for admin)
 exports.getAllCatalogs = async (req, res) => {
   try {
-    const { page = 1, limit = 10, status } = req.query;
+    const { page = 1, limit = 10, status, isArchived } = req.query;
     const query = {};
     if (status) {
       query.status = status;
     }
+    if (isArchived !== undefined) {
+      query.isArchived = isArchived === "true";
+    }
 
     const catalogs = await Catalog.find(query)
-      .populate("sellerId", "email")
+      .populate("sellerId", "firstName lastName email profileImage")
       .populate("storeId", "storeName")
+      .populate("categories")
+      .populate("subCategories")
+      .populate("subSubCategories")
       .limit(limit * 1)
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 });
@@ -451,7 +522,7 @@ exports.deleteCatalog = async (req, res) => {
   }
 };
 
-// Get file preview (reusing the existing one from store setup)
+// Get file preview
 exports.getFilePreview = async (req, res) => {
   try {
     const { filename } = req.params;

@@ -12,6 +12,7 @@ const {
   deleteCatalog,
   getFilePreview,
   getCatalogsAdmin,
+  getArchivedCatalogs,
 } = require("../controller/catalogController");
 const multer = require("multer");
 const path = require("path");
@@ -89,6 +90,7 @@ router.put(
 
 router.get("/status", protect, authorize("seller"), getCatalogStatus);
 router.get("/catalogs", protect, authorize("seller"), getCatalogs);
+router.get("/archived", protect, authorize("seller"), getArchivedCatalogs);
 router.get("/catalogs/:sellerId", isAdmin, getCatalogsAdmin);
 router.get("/all", isAdmin, getAllCatalogs);
 router.put("/status", isAdmin, updateCatalogStatus);

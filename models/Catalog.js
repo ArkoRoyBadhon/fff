@@ -42,6 +42,10 @@ const catalogSchema = new mongoose.Schema({
     enum: ["pending", "deactive", "approved", "rejected"],
     default: "pending",
   },
+  isArchived: {
+    type: Boolean,
+    default: false,
+  },
   rejectionReasons: [
     {
       field: { type: String },

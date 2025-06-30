@@ -6,10 +6,13 @@ const { isAdmin } = require("../middleware/adminMiddleware");
 const {
   createPaymentIntent,
   handlePaymentSuccess,
+  cancelSubscription,
+  checkExpiredSubscriptions,
   assignFreePackage,
   getSubscriptions,
   getActiveSubscription,
   getPaymentMethods,
+  renewSubscription,
 } = require("../controller/subscriptionController");
 const {
   getPackages,
@@ -38,9 +41,13 @@ router.post(
   createPaymentIntent
 );
 router.post("/success", protect, authorize("seller"), handlePaymentSuccess);
+router.post("/cancel", protect, authorize("seller"), cancelSubscription);
+router.get("/check-expired", protect, isAdmin, checkExpiredSubscriptions);
 router.post("/assign-free", protect, authorize("seller"), assignFreePackage);
 router.get("/", protect, isAdmin, getSubscriptions);
 router.get("/active", protect, authorize("seller"), getActiveSubscription);
 router.get("/payment-methods", protect, authorize("seller"), getPaymentMethods);
+
+router.post("/renew", protect, authorize("seller"), renewSubscription);
 
 module.exports = router;

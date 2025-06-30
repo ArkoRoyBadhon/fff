@@ -274,15 +274,12 @@ exports.getAllStoresForUser = async (req, res) => {
       query.certifications = { $regex: certificate, $options: "i" };
     }
 
-    // Handle verified filter at the query level for better performance
+    // Handle verified filter
     if (verified === "true") {
-      // First find all premium users
       const premiumUsers = await User.find({ membership: "premium" }).select(
         "_id"
       );
       const premiumUserIds = premiumUsers.map((user) => user._id);
-
-      // Only include stores from premium users
       query.sellerId = { $in: premiumUserIds };
     }
 
@@ -293,10 +290,19 @@ exports.getAllStoresForUser = async (req, res) => {
       .skip((page - 1) * limit)
       .sort({ createdAt: -1 });
 
-    // Get products for each store
     const storesWithProducts = await Promise.all(
       stores.map(async (store) => {
-        const products = await Product.find({ seller: store.sellerId._id })
+        const activeCatalogs = await Catalog.find({
+          storeId: store._id,
+          isArchived: false,
+        }).select("_id");
+
+        const catalogIds = activeCatalogs.map((catalog) => catalog._id);
+
+        const products = await Product.find({
+          seller: store.sellerId._id,
+          catalog: { $in: catalogIds },
+        })
           .limit(3)
           .sort({ createdAt: -1 });
 
@@ -536,7 +542,7 @@ exports.getTopVerifiedExporters = async (req, res) => {
 
     // Filter out stores where sellerId is null (no matching premium membership)
     const filteredStores = premiumStores
-      .filter((store) => store.sellerId)
+      // .filter((store) => store.sellerId)
       .map((store) => ({
         _id: store._id,
         storeName: store.storeName,
